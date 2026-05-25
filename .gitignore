@@ -1,0 +1,10 @@
+# Nutzerdaten ignorieren
+debug_log.txt
+config.ini
+savegames/
+__pycache__/
+*.pyc
+teilnehmer.txt
+Todos.txt
+_temp_launcher.py
+next_match.csv
