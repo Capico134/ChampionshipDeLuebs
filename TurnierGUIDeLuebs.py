@@ -7,6 +7,7 @@ from TurnierLogikDeLuebs import generiere_spielplan, berechne_ko_phase
 from MatchManagerDeLuebs import TurnierPhase
 import json #Für Live-Ticker
 import ctypes
+import datetime # <--- WICHTIG: Import für die Zeit
 
 # --- Windows High-DPI Fix für gestochen scharfe Schriften ---
 try:
@@ -804,10 +805,19 @@ class TurnierGUI:
         self.check_live_data()
 
     def check_live_data(self):
+
+        
         live_file = self.datei_manager.live_ticker_path
+        zeit_jetzt = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3] # <--- WICHTIG: Zeit generieren
         
         # 1. GIBT ES DIE DATEI ÜBERHAUPT?
         if not os.path.exists(live_file):
+            # Damit die Konsole nicht alle 500ms zugespamt wird, loggen wir das Löschen nur einmalig
+            #if self.last_mtime != 0:
+            #    print(f"\n🗑️  [{zeit_jetzt}] live_ticker.json existiert NICHT (wurde gelöscht).")
+            #    print(f"📺  BEAMER-ANSCHLUSS -> Setze auf: 0 : 0 | Status: 'WARTEN'")
+            #    print("="*80 + "\n")            
+            
             # Keine Datei = Match ist abgerechnet oder noch keines gestartet
             if self.beamer_window and tk.Toplevel.winfo_exists(self.beamer_window):
                 self.beamer_window.update_live_score(0, 0, "WARTEN")
@@ -820,6 +830,14 @@ class TurnierGUI:
                 try:
                     with open(live_file, "r") as f:
                         data = json.load(f)
+
+                    ## --- START DER DIAGNOSE-ÜBERSCHRIFT ---
+                    #print(f"\n📅 ==================== [ LIVE-TICKER UPDATE: {zeit_jetzt} ] ====================")
+                    #print(f"📄 ROHDATEN AUS DATEI (Änderungszeit: {datetime.datetime.fromtimestamp(current_mtime).strftime('%H:%M:%S.%f')[:-3]}):")
+                    ## Wir geben die JSON schön formatiert aus, damit man alles sieht
+                    #print(json.dumps(data, indent=4))
+                    #print("-" * 50)
+
                     
                     # Falls du später mal {"metadata": ..., "timeline": [...]} nutzt:
                     timeline = data.get("timeline", []) if isinstance(data, dict) else data
@@ -849,6 +867,12 @@ class TurnierGUI:
                             p2_treffer = ev.get("p2_pd", 0)
                             p1_speed   = ev.get("p1_spd", 0.0)
                             p2_speed   = ev.get("p2_spd", 0.0)
+                        else:
+                            # <--- WICHTIG: Das fehlende Auffangbecken für reine Status-Wechsel!
+                            p1_treffer = ev.get("p1_pd", 0)
+                            p2_treffer = ev.get("p2_pd", 0)
+                            p1_speed   = ev.get("p1_spd", 0.0)
+                            p2_speed   = ev.get("p2_spd", 0.0)
 
                     is_ko = getattr(self.match_manager, "phase", None) in [TurnierPhase.KO_PHASE, TurnierPhase.BEENDET]
                     if is_ko and not self.match_manager.get_aktuelles_match().get("stechen_notwendig"):
@@ -859,6 +883,10 @@ class TurnierGUI:
                         # Gruppenphase ODER Stechen: Nur reine Treffer anzeigen
                         p1_score = str(p1_treffer)
                         p2_score = str(p2_treffer)
+
+                    # --- DIAGNOSE: WAS MACHT DER BEAMER DRAUS? ---
+                    #print(f"📺 BEAMER-BERECHNUNG -> P1: {p1_score} | P2: {p2_score} | Status: '{current_status}'")
+                    #print("=" * 82 + "\n")
                             
                     # Finalen Stand an den Beamer senden
                     if self.beamer_window and tk.Toplevel.winfo_exists(self.beamer_window):
@@ -867,20 +895,12 @@ class TurnierGUI:
                     self.last_mtime = current_mtime
                     
                 except Exception as e:
-                    pass # Lese-Kollision ignorieren
+                    # <--- WICHTIG: Den Fehler ausgeben statt verschweigen!
+                    print(f"⚠️ [{zeit_jetzt}] Fehler in check_live_data: {e}")
 
-        # 3. ENDLOSSCHLEIFE AUFRECHTERHALTEN
-        # Wichtig: Dies muss GANZ am Ende stehen, auf der gleichen Einrückungsebene 
-        # wie das `if not os.path.exists...`, damit das Polling niemals stehen bleibt!
         self.root.after(500, self.check_live_data)
-        #except Exception as e:
-        #    # Hier geben wir den exakten Fehlertyp und die Nachricht aus
-        #    print(f"❌ KRITISCHER FEHLER im Live-Ticker:")
-        #    print(f"   Fehlermeldung: {str(e)}")
-        #    print(f"   Versuchter Pfad: {self.datei_manager.live_ticker_path}")
-        #    #pass
-        
-        
+
+#NETZWERKFREIGABE:       
 #sudo nano /etc/samba/smb.conf  
 #Diesen Block ganz unten am Ende der Datei einfügen:
 #[Live]
