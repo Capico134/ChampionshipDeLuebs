@@ -570,23 +570,18 @@ class TurnierGUI:
         if not m.get("gespielt"): return
         
         if messagebox.askyesno("Match Reset", f"Match {m['match_nr']} wirklich zurücksetzen und NEU STARTEN?"):
-            # 1. Daten im Manager zurücksetzen (Punkte und "gespielt"-Flag löschen)
+            # 1. Daten und Phase im Manager zurücksetzen
             self.match_manager.reset_match(idx, is_ko)
             
             # 2. DER CLOU: Wir sortieren nichts um! 
             # Wir setzen einfach den aktuellen Spiel-Index auf dieses Match.
-            # Das funktioniert in BEIDEN Phasen (Gruppe & KO) perfekt.
-            #self.match_manager.aktuelles_match_index = idx
             self.match_manager.setze_aktuelles_match(idx, is_ko)
-            
-            # 3. Sofort die Namen an den Pi / Beamer senden
-            #self.match_zu_pi()
             
             # 4. GUI aktualisieren und Stand speichern
             self.update_all_displays()
             self.datei_manager.speichere_turnier_stand(self.match_manager.get_state())
             
-            self.status_label.config(text=f"🔄 Match {m['match_nr']} wurde zurückgesetzt und neu gestartet.", foreground="blue")         
+            self.status_label.config(text=f"🔄 Match {m['match_nr']} wurde zurückgesetzt und neu gestartet.", foreground="blue")        
 
     def match_vorziehen_gui(self, is_ko=False):
         if is_ko: return # KO darf nicht vorgezogen werden

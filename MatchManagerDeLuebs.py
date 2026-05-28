@@ -328,6 +328,11 @@ class MatchManager:
                 self.recalculate_stats()
             # Hinweis: Beim Resetten eines KO-Matches werden die Folge-Matches (noch) nicht geleert,
             # aber man kann das Match nun neu spielen.
+            
+            # --- ELA-ARCHITEKTUR: Die State-Machine regelt sich selbst ---
+            if self.phase in [TurnierPhase.BEENDET, TurnierPhase.GRUPPEN_ABGESCHLOSSEN]:
+                self.phase = TurnierPhase.KO_PHASE if is_ko else TurnierPhase.GRUPPENPHASE            
+            
             return True
         return False
 
