@@ -1,12 +1,4 @@
 @echo off
-echo.
-echo ===========================================
-echo   Championship DeLuebs - Update-Service 📊
-echo ===========================================
-echo.
-git fetch origin
-git reset --hard origin/main
-echo.
 echo ===========================================
 echo   Shooting DeLuebs - Update-Service 🎯
 echo ===========================================
@@ -16,7 +8,20 @@ echo.
 :: Führt den Pull-Befehl aus, um Änderungen zu laden
 cd ..\ShootingDeLuebs
 git fetch origin
+:: Zeigt die rot/grünen Änderungen an, bevor überschrieben wird
+git diff --stat --color HEAD origin/main
 git reset --hard origin/main
+echo.
+echo ===========================================
+echo   Championship DeLuebs - Update-Service 📊
+echo ===========================================
+echo.
+cd ..\ChampionshipDeLuebs
+git fetch origin
+:: Zeigt die rot/grünen Änderungen an, bevor überschrieben wird
+git diff --stat --color HEAD origin/main
+git reset --hard origin/main
+echo.
 echo -------------------------------------------
 echo Update-Vorgang abgeschlossen.
 echo.
