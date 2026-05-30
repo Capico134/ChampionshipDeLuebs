@@ -83,25 +83,6 @@ class TurnierGUI:
         # 4. Key-Bindings
         self.root.bind("<Control_L>", self.ergebnis_abholen)
         
-        ## --- NEU: ELA - Konfigurierbare Beamer-Steuerleiste ---
-        #self.beamer_frame = tk.Frame(self.root)
-        #self.beamer_frame.pack(pady=10)
-        #
-        ## Der Button kommt ganz nach links
-        #self.btn_beamer = ttk.Button(self.beamer_frame, text="📺 BEAMER-ANZEIGE ÖFFNEN", command=self.open_beamer)
-        #self.btn_beamer.pack(side="left", padx=(0, 30)) # 30px Abstand nach rechts
-        #
-        #
-        ## Spinbox 1: Matches pro Seite
-        #tk.Label(self.beamer_frame, text="Matches pro Seite:").pack(side="left", padx=(0, 5))
-        #ttk.Spinbox(self.beamer_frame, from_=5, to=50, width=4, textvariable=self.var_matches_per_page).pack(side="left", padx=(0, 20))
-        #
-        ## Spinbox 2: Gruppen pro Seite
-        #tk.Label(self.beamer_frame, text="Gruppen pro Seite:").pack(side="left", padx=(0, 5))
-        #ttk.Spinbox(self.beamer_frame, from_=1, to=10, width=4, textvariable=self.var_groups_per_page).pack(side="left")
-        #
-        # FERTIG! Die __init__ ist jetzt dumm, sauber und extrem schnell.
-
     # --- NEU: Diese Methode kümmert sich um den eigenen Titel ---
     def set_pause_title(self, is_paused):
         if is_paused:
@@ -160,7 +141,7 @@ class TurnierGUI:
         # --- NEU: ELA - Kombinierte Fußleiste (Status + Beamer) ---
         # ==========================================================
         bottom_bar = ttk.Frame(self.root)
-        bottom_bar.pack(side=tk.BOTTOM, fill=tk.X, padx=10, pady=5)
+        bottom_bar.pack(side=tk.BOTTOM, fill=tk.X, padx=10, pady=6)
 
         # 1. Status ganz links ankleben
         self.status_label = ttk.Label(bottom_bar, text="Bereit", font=("Arial", 10))
@@ -406,7 +387,12 @@ class TurnierGUI:
         soll_zufall_sein = self.zufall_var.get()
             
         # 4. Den dynamischen Parameter an unsere TurnierLogik übergeben!
-        gruppen, plan = generiere_spielplan(namen, gruppen_groesse, zufall=soll_zufall_sein)
+        try:
+            gruppen, plan = generiere_spielplan(namen, gruppen_groesse, zufall=soll_zufall_sein)
+        except ValueError as e:
+            # Fängt den Fehler von oben ab und zeigt ihn als Pop-up!
+            messagebox.showerror("Namen-Fehler", str(e))
+            return
         
         self.match_manager.setze_turnier_daten(gruppen, plan)
         self.update_all_displays()

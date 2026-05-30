@@ -358,12 +358,20 @@ class MatchManager:
         self.ergebnisse = state_dict.get("ergebnisse", {})
         self.gruppen_zeiten = state_dict.get("gruppen_zeiten", {})
 
-        # WICHTIG: Wir suchen in der alten Datei nach "turnier_modus"
-        geladener_modus = state_dict.get("turnier_modus", "NICHT_GESTARTET")
-        if geladener_modus == "GRUPPE": geladener_modus = "GRUPPENPHASE"
-        
-        # Und weisen es unserer neuen schicken Variable zu!
-        self.phase = TurnierPhase[geladener_modus]
+        # 1. Wert aus der JSON lesen (Fallback: NICHT_GESTARTET)
+        geladener_modus = state_dict.get("turnier_modus", "NICHT_GESTARTET").upper()
+        # 2. Übersetzungs-Wörterbuch für alte oder manuell falsch getippte Versionen
+        legacy_mapping = {
+            "GRUPPE": "GRUPPENPHASE",
+            "KO": "KO_PHASE"
+        }
+        geladener_modus = legacy_mapping.get(geladener_modus, geladener_modus)
+        # 3. Kugelsichere Umwandlung ins Enum (Verhindert Absturz bei Tippfehlern in der JSON)
+        try:
+            self.phase = TurnierPhase[geladener_modus]
+        except KeyError:
+            print(f"⚠️ Warnung: Unbekannter Turnier-Modus '{geladener_modus}' in JSON. Setze auf NICHT_GESTARTET.")
+            self.phase = TurnierPhase.NICHT_GESTARTET
 
         self.ko_spielplan = state_dict.get("ko_spielplan", [])
         self.ko_aktuell_index = state_dict.get("ko_aktuell_index", 0)

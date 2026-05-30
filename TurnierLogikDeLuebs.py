@@ -3,6 +3,12 @@ import math
 import random
 
 def generiere_spielplan(namen, gruppen_groesse=4, zufall=False):
+    # --- NEU: Prüfung auf doppelte Namen (Sicherheitsschranke) ---
+    if len(namen) != len(set(namen)):
+        # Wir suchen gezielt heraus, welche Namen doppelt sind, für eine saubere Fehlermeldung
+        doppelte = set([name for name in namen if namen.count(name) > 1])
+        raise ValueError(f"Jeder Teilnehmername muss einzigartig sein!\nFolgende Namen sind doppelt: {', '.join(doppelte)}")
+    
     # ELA: Wenn "zufall" wahr ist, mischen wir eine Kopie der Liste
     if zufall:
         namen = namen.copy()
