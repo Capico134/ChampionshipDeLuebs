@@ -8,6 +8,7 @@ from MatchManagerDeLuebs import TurnierPhase
 import json #Für Live-Ticker
 import ctypes
 import datetime # <--- WICHTIG: Import für die Zeit
+import tkinter.font as tkFont
 
 # --- Windows High-DPI Fix für gestochen scharfe Schriften ---
 try:
@@ -21,6 +22,37 @@ class TurnierGUI:
     def __init__(self, root, datei_manager, match_manager, version, auto_beamer=False, always_on_top=False):
         # 1. Variablen und Zustände speichern (Keine Aktionen!)
         self.root = root
+        
+        # =====================================================================
+        # 🚀 GLOBALER SCHRIFTGRÖSSEN-BOOSTER (Perfekt für Laptops)
+        # =====================================================================
+       
+        # 1b. Klassische Tkinter-Standardschriften vergrößern (Standard ist oft 9 oder 10)
+        groesse_hauptschrift = 14  # <-- Hier kannst du die globale Größe anpassen!
+        self.root.option_add("*Text.font", ("Segoe UI", groesse_hauptschrift))
+        self.root.option_add("*Entry.font", ("Segoe UI", groesse_hauptschrift))
+        self.root.option_add("*Listbox.font", ("Segoe UI", groesse_hauptschrift))
+        
+        for font_name in ["TkDefaultFont", "TkTextFont", "TkMenuFont"]:
+            try:
+                tkFont.nametofont(font_name).configure(size=groesse_hauptschrift)
+            except Exception:
+                pass
+        try:
+            tkFont.nametofont("TkHeadingFont").configure(size=groesse_hauptschrift + 1, weight="bold")
+        except Exception:
+            pass
+                
+        # 2. Modernen TTK-Style konfigurieren (für ttk.Label, ttk.Button, ttk.Treeview)
+        self.style = ttk.Style()
+        self.style.configure(".", font=("Segoe UI", groesse_hauptschrift))
+        
+        # 3. SPEZIAL-TUNING FÜR DIE TABELLEN (Treeview)
+        # Wenn Schriften größer werden, müssen die Zeilen mehr Platz nach oben/unten haben!
+        self.style.configure("Treeview.Heading", font=("Segoe UI", groesse_hauptschrift, "bold"))
+        self.style.configure("Treeview", font=("Segoe UI", groesse_hauptschrift - 1), rowheight=32) # rowheight=32 gibt ordentlich Luft!
+        # =====================================================================
+        
         self.datei_manager = datei_manager
         self.match_manager = match_manager
         # --- NEU: ELA - Einmal das Radio abonnieren ---
