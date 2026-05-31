@@ -4,7 +4,7 @@ class HtmlExporter:
     def __init__(self, filename="./savegames/Turnierbericht.html"):
         self.filename = filename
 
-    def generiere_bericht(self, ergebnisse, spielplan=None, ko_spielplan=None, mit_gruppenuebersicht=True, mit_sonderwertungen=True, mit_gruppenmatches=True, datei_manager=None):
+    def generiere_bericht(self, ergebnisse, spielplan=None, ko_spielplan=None, datei_manager=None, silent=False):
         if spielplan is None:
             spielplan = []
         if ko_spielplan is None:
@@ -15,6 +15,18 @@ class HtmlExporter:
         stats = [{"n":k, **v} for k,v in ergebnisse.items()]
         if not stats:
             return False, "Keine Daten zum Exportieren vorhanden!"
+
+        # --- NEU: DIE INTELLIGENZ (Zustand aus den Daten ablesen) ---
+        
+        # Überprüfen, ob überhaupt schon ein einziges Spiel absolviert wurde
+        mit_gruppenuebersicht = any(m.get("gespielt", False) for m in spielplan)
+        # Sind ALLE Gruppenspiele gespielt?
+        gruppen_beendet = bool(spielplan) and all(m.get("gespielt", False) for m in spielplan)
+        # Ist das Finale gespielt?
+        finale = next((m for m in ko_spielplan if m.get("match_nr") == "FIN"), None)
+        spiel_um_platz_3 = next((m for m in ko_spielplan if m.get("match_nr") == "3PL"), None)
+        turnier_beendet = finale is not None and finale.get("gespielt") is True
+        # -------------------------------------------------------------
 
         # 1. Daten nach Gruppen aufteilen und sortieren
         gruppen_daten = {}
@@ -31,10 +43,10 @@ class HtmlExporter:
                 reverse=True
             )
 
-        # 2. Prüfen, ob das Turnier (Finale) beendet ist
-        finale = next((m for m in ko_spielplan if m.get("match_nr") == "FIN"), None)
-        spiel_um_platz_3 = next((m for m in ko_spielplan if m.get("match_nr") == "3PL"), None)
-        turnier_beendet = finale is not None and finale.get("gespielt") is True
+        ## 2. Prüfen, ob das Turnier (Finale) beendet ist
+        #finale = next((m for m in ko_spielplan if m.get("match_nr") == "FIN"), None)
+        #spiel_um_platz_3 = next((m for m in ko_spielplan if m.get("match_nr") == "3PL"), None)
+        #turnier_beendet = finale is not None and finale.get("gespielt") is True
 
         # 3. HTML-Grundgerüst bauen
         html = """
@@ -44,6 +56,9 @@ class HtmlExporter:
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>Shooting DeLübs - Turnierbericht</title>
+            <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
+            <meta http-equiv="pragma" content="no-cache">
+            <meta http-equiv="expires" content="0">
             <style>
                 body { background-color: #1a1a1a; color: white; font-family: 'Segoe UI', Arial, sans-serif; padding: 15px; line-height: 1.6; }
                 h1 { color: #00ff00; text-align: center; font-size: 2.2em; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 5px; }
@@ -163,7 +178,7 @@ class HtmlExporter:
                 </div>
                 """
         # 6. EINZELNE GRUPPENSPIELE
-        if mit_gruppenmatches and spielplan:
+        if spielplan: #mit_gruppenmatches and 
             html += "<h2>⚔️ Alle Gruppenspiele</h2>"
             html += """
             <div class="table-container">
@@ -251,7 +266,7 @@ class HtmlExporter:
             """
 
         # 8. SONDERWERTUNGEN
-        if mit_sonderwertungen:
+        if gruppen_beendet:
             html += "<h2>⭐ Sonderwertungen</h2>"
             
             # ==========================================
@@ -387,6 +402,7 @@ class HtmlExporter:
             nerven_spieler = []
             max_ko_score = -1.0
 
+        if turnier_beendet:
             # K.O.-Daten durchsuchen
             if ko_spielplan:
                 for match in ko_spielplan:
@@ -459,7 +475,8 @@ class HtmlExporter:
             with open(self.filename, "w", encoding="utf-8") as f:
                 f.write(html)
             
-            if os.name == 'nt':
+            # NEU: Öffnet den Browser NUR, wenn silent = False ist (beim manuellen Klick)
+            if not silent and os.name == 'nt':
                 absoluter_pfad = os.path.abspath(self.filename)
                 os.startfile(absoluter_pfad)
                 

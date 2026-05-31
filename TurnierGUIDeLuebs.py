@@ -394,11 +394,13 @@ class TurnierGUI:
             messagebox.showerror("Namen-Fehler", str(e))
             return
         
+        # Diese drei Dinge braucht nur der Turnier-Start (GUI-spezifisch)
         self.match_manager.setze_turnier_daten(gruppen, plan)
-        self.update_all_displays()
         self.build_time_inputs()
         self.notebook.select(1)
-        self.datei_manager.speichere_turnier_stand(self.match_manager.get_state())
+        
+        # --- ELA: Unsere neue All-in-One Abschlussschleuse! ---
+        self._abschluss_routine()
 
     def start_ko_phase_gui(self):
         # 1. Smarte Warnung anhand der State-Machine
@@ -479,10 +481,23 @@ class TurnierGUI:
         else:
             self.match_manager.trage_ergebnis_ein(b1, b2, t1, t2, pi_id)
 
-        # 2. Einmalig aufräumen und speichern für ALLE Szenarien (DRY-Prinzip!)
+        # 2. Zentrale Abschlussarbeiten erledigen
+        self._abschluss_routine()
+
+    def _abschluss_routine(self):
+        """Erledigt alle Speicher- und Update-Aufgaben nach jedem veränderten Match zentral."""
         self.update_all_displays()
         self.datei_manager.speichere_turnier_stand(self.match_manager.get_state())
         self.datei_manager.loesche_live_datei()
+        
+        # Der lautlose HTML-Drucker im Hintergrund
+        self.html_exporter.generiere_bericht(
+            ergebnisse=self.match_manager.ergebnisse, 
+            spielplan=self.match_manager.spielplan,
+            ko_spielplan=self.match_manager.ko_spielplan,
+            datei_manager=self.datei_manager,
+            silent=True 
+        )        
             
     def open_score_dialog(self, title, match, start_values, save_callback):
         """Allgemeine ELA-Schablone für alle Match-Eingabe-Popups."""
@@ -534,9 +549,7 @@ class TurnierGUI:
         # Die Logik, die beim Speichern ausgeführt werden soll (Der Callback)
         def save_action(b1, b2, t1, t2):
             self.match_manager.trage_ergebnis_ein(b1, b2, t1, t2, "MANUELL")
-            self.update_all_displays()
-            self.datei_manager.speichere_turnier_stand(self.match_manager.get_state())
-            self.datei_manager.loesche_live_datei()
+            self._abschluss_routine()
             return True # Signalisiert der Schablone, dass sie sich schließen darf
 
         # Schablone aufrufen (Startwerte sind alle 0)
@@ -565,15 +578,14 @@ class TurnierGUI:
         # Die Logik, die beim Editieren ausgeführt werden soll (Der Callback)
         def save_action(b1, b2, t1, t2):
             if self.match_manager.edit_match(idx, b1, b2, t1, t2, is_ko):
-                self.update_all_displays()
-                self.datei_manager.speichere_turnier_stand(self.match_manager.get_state())
+                # --- ELA: Nur noch der zentrale Aufruf für UI, Speichern und HTML! ---
+                self._abschluss_routine() 
                 return True
             return False
 
         # Schablone aufrufen (Startwerte sind die bereits gespeicherten Ergebnisse)
         start_vals = [m.get('base1', 0), m.get('base2', 0), m.get('total1', 0.0), m.get('total2', 0.0)]
         self.open_score_dialog("Match Editieren", m, start_vals, save_action)
-
 
     def reset_match_gui(self, is_ko=False):
         tree = self.tree_ko if is_ko else self.tree_matches
@@ -747,40 +759,13 @@ class TurnierGUI:
         self.update_all_displays()
 
     def export_html_bericht(self):
-        mit_gruppenuebersicht = messagebox.askyesno(
-            "Gruppenübersicht", 
-            "Gruppenübersichten angezeigen?"
-        )
-
-        # --- NEU: Abfrage für die Gruppenmatches ---
-        mit_gruppenmatches = messagebox.askyesno(
-            "Gruppenspiele", 
-            "Spielplan Gruppenphase anzeigen?"
-        )
-
-        mit_sonderwertungen = messagebox.askyesno(
-            "Sonderwertungen", 
-            "Sonderwertungen anzeigen ('Pechvogel' und Top-5 Gesamt-Score)?"
-        )
-        
-        # --- NEU: Wir übergeben jetzt auch den 'spielplan' und die neue Entscheidung ---
+        # Einfach machen, nicht mehr fragen! Und da silent=False (Standard), öffnet sich der Browser.
         erfolg, nachricht = self.html_exporter.generiere_bericht(
             ergebnisse=self.match_manager.ergebnisse, 
             spielplan=self.match_manager.spielplan,
             ko_spielplan=self.match_manager.ko_spielplan, 
-            mit_gruppenuebersicht=mit_gruppenuebersicht,
-            mit_sonderwertungen=mit_sonderwertungen,
-            mit_gruppenmatches=mit_gruppenmatches,
-            datei_manager=self.datei_manager # <--- HIER DEN ÜBERSETZER MITGEBEN
+            datei_manager=self.datei_manager
         )
-        
-        if erfolg:
-            pass
-            #messagebox.showinfo("Erfolg", nachricht)
-        else:
-            messagebox.showwarning("Achtung", nachricht)
-
-
  
     def open_beamer(self):
         if not hasattr(self, 'beamer_window') or not self.beamer_window or not tk.Toplevel.winfo_exists(self.beamer_window):
