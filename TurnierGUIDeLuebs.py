@@ -418,9 +418,13 @@ class TurnierGUI:
         
         vf = berechne_ko_phase(self.match_manager.ergebnisse, self.match_manager.gruppen, anzahl)
         self.match_manager.starte_ko_phase(vf)
-        self.update_all_displays()
+        
+        # 3. Zentrale Abschlussarbeiten (GUI Update, Speichern & HTML-Druck)
+        self._abschluss_routine()
+        
+        # 4. Zum K.O.-Tab wechseln
         self.notebook.select(3)
-
+        
     def ergebnis_abholen(self, event=None):
         if event and isinstance(event.widget, (tk.Entry, ttk.Entry, tk.Text, ttk.Combobox)): return
         

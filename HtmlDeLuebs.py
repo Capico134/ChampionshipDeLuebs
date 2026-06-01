@@ -187,7 +187,7 @@ class HtmlExporter:
                         <th>Nr.</th>
                         <th>Grp</th>
                         <th style="text-align: left;">Paarung</th>
-                        <th>Trf</th>
+                        <th>Treffer</th>
                         <th>Match-Wertung</th>
                     </tr>
             """
@@ -223,7 +223,7 @@ class HtmlExporter:
                     <tr>
                         <th>Phase</th>
                         <th style="text-align: left;">Paarung</th>
-                        <th>Trf</th>
+                        <th>Trefferf</th>
                         <th>Match-Wertung</th>
                         <th>Sieger</th>
                     </tr>
@@ -287,22 +287,34 @@ class HtmlExporter:
                     if p1: spieler_scores.setdefault(p1, []).append(s1)
                     if p2: spieler_scores.setdefault(p2, []).append(s2)
 
-            # --- 1. PECHVOGEL ---
-            ehrentafel = sorted(stats, key=lambda x: x.get("score_erzielt", 0), reverse=True)
-            min_punkte = min([s.get("punkte", 0) for s in stats]) if stats else 0
-            kandidaten = [s for s in stats if s.get("punkte", 0) == min_punkte]
+            # --- 1. PECHVOGEL (Nur unter den Ausgeschiedenen!) ---
             
-            if kandidaten:
-                max_pech_score = max([s.get("score_erzielt", 0) for s in kandidaten])
-                # Sammle alle Spieler, die genau diesen Max-Score (bei wenigsten Punkten) haben
-                pechvoegel = [s["n"] for s in kandidaten if s.get("score_erzielt", 0) == max_pech_score]
+            # Wir extrahieren alle Spieler, die es in die K.O.-Phase geschafft haben.
+            qualifiziert = set()
+            for ko_match in ko_spielplan:
+                p1 = ko_match.get("spieler1", "")
+                p2 = ko_match.get("spieler2", "")
+                if p1 and p1 not in ["?", "Freilos"]: qualifiziert.add(p1)
+                if p2 and p2 not in ["?", "Freilos"]: qualifiziert.add(p2)
+            
+            # Filter: Wir betrachten nur Spieler, die NICHT weitergekommen sind!
+            ausgeschiedene = [s for s in stats if s["n"] not in qualifiziert]
+            
+            # Nur weitermachen, wenn es überhaupt ausgeschiedene Spieler gibt
+            if ausgeschiedene:
+                # NEUE LOGIK: Wir suchen den höchsten Score, runden aber vorher zwingend auf 2 Stellen
+                max_pech_score = max([round(s.get("score_erzielt", 0), 2) for s in ausgeschiedene])
+                
+                # Finde alle Spieler, deren (gerundeter) Score diesem Maximum entspricht
+                pechvoegel = [s["n"] for s in ausgeschiedene if round(s.get("score_erzielt", 0), 2) == max_pech_score]
                 namen_str = " & ".join([f"<strong>{n}</strong>" for n in pechvoegel])
                 
+                # NEUER TEXT: Fokus auf die starke Leistung trotz des Ausscheidens
                 html += f"""
                 <div class="award-box">
                     <h3 class="award-title">🍀 Der "Pechvogel des Tages"</h3>
                     <p>Der Sonderpreis der Herzen geht an {namen_str}!<br>
-                    Viel Pech führte zu nur {min_punkte} Turnierpunkten in der Gruppenphase. Dennoch wurde eine bärenstarke <span class="highlight-gold">Gesamtleistung von {max_pech_score:.2f}</span> abgeliefert.</p>
+                    Trotz einer bärenstarken <span class="highlight-gold">Gesamtleistung von {max_pech_score:.2f}</span> hat es in einer gnadenlosen Gruppe leider nicht für den Einzug in die K.O.-Phase gereicht. Das ist wahres Pech!</p>
                 </div>
                 """
 
@@ -316,10 +328,10 @@ class HtmlExporter:
                     min_score = round(min(scores), 2)
                     max_score = round(max(scores), 2)
                     
-                    # Jetzt rechnet er mit den exakt gleichen Zahlen, die auch der Leser sieht
-                    schwankung = round(max_score - min_score, 2)
-                    
-                    uhrwerk_kandidaten.append((name, schwankung, min_score, max_score))
+                    # NEUE LOGIK: Verhindert, dass jemand gewinnt, der durchgehend 0 geschossen hat!
+                    if max_score > 0:
+                        schwankung = round(max_score - min_score, 2)
+                        uhrwerk_kandidaten.append((name, schwankung, min_score, max_score))
             
             if uhrwerk_kandidaten:
                 best_schwankung = min([k[1] for k in uhrwerk_kandidaten])
@@ -345,13 +357,14 @@ class HtmlExporter:
                 name = s["n"]
                 scores = spieler_scores.get(name, [])
                 if len(scores) > 1:
-                    # FIX: Auch hier zuerst auf 2 Stellen runden!
                     erstes_match = round(scores[0], 2)
-                    bestes_match = round(max(scores), 2)
                     
-                    steigerung = round(bestes_match - erstes_match, 2)
+                    # NEUE LOGIK: Wir vergleichen mit dem LETZTEN Match (scores[-1]), nicht mit dem besten!
+                    letztes_match = round(scores[-1], 2)
+                    
+                    steigerung = round(letztes_match - erstes_match, 2)
                     if steigerung > 0: 
-                        spaetzuender_kandidaten.append((name, steigerung, erstes_match, bestes_match))
+                        spaetzuender_kandidaten.append((name, steigerung, erstes_match, letztes_match))
 
             if spaetzuender_kandidaten:
                 best_steigerung = max([k[1] for k in spaetzuender_kandidaten])
@@ -361,16 +374,17 @@ class HtmlExporter:
                 <div class="award-box">
                     <h3 class="award-title">🚀 Der "Spätzünder"</h3>
                     <p>Der Preis für das größte Comeback!<br>
-                    Mit einer gewaltigen Leistungssteigerung von <span class="highlight-gold">{best_steigerung:.2f} in der Match-Wertung</span> im Turnierverlauf:</p>
+                    Mit einer gewaltigen Leistungssteigerung von <span class="highlight-gold">{best_steigerung:.2f} in der Match-Wertung</span> vom ersten bis zum letzten Gruppenspiel:</p>
                     <ul style="list-style-type: none; padding-left: 0;">
                 """
-                
                 for (name, steigerung, start, best) in sieger_spaet:
                     html += f"<li style='margin-bottom: 5px;'><strong>{name}</strong> <em>(gesteigert von {start:.2f} auf {best:.2f})</em></li>"
-                    
                 html += "</ul></div>"
 
             # --- TOP 5 TABELLE ---
+            # NEU EINGEFÜGT: Hier wird die Ehrentafel wieder definiert!
+            ehrentafel = sorted(stats, key=lambda x: x.get("score_erzielt", 0), reverse=True)
+            
             html += """
                 <div class="table-container">
                     <h3 style="background-color: #222; border-bottom: 1px solid #444; color: #aaa; font-size: 1em; padding: 5px;">Top 5 - Die stärkste Gesamtleistung</h3>
@@ -445,7 +459,7 @@ class HtmlExporter:
                     <div class="award-box" style="border-left-color: #ff3333;">
                         <h3 class="award-title" style="color: #ff3333;">📸 Das Fotofinish</h3>
                         <p>Das dramatischste Duell auf Messers Schneide!<br>
-                        Mit unfassbaren <span style="color: #ff3333; font-weight: bold;">{min_diff:.3f}</span> Unterschied in der Match-Wertung trennten sich:</p>
+                        Mit unfassbaren <span style="color: #ff3333; font-weight: bold;">{min_diff:.2f}</span> Unterschied in der Match-Wertung trennten sich:</p>
                         <ul style="list-style-type: none; padding-left: 0;">
                     """
                     for (p1, p2, t1, t2, diff, phase) in fotofinish_matches:
@@ -453,7 +467,7 @@ class HtmlExporter:
                     html += "</ul></div>"
                     
                 # --- 5. NERVEN AUS STAHL ---
-                if nerven_spieler:
+                if nerven_spieler and max_ko_score > 0:
                     html += f"""
                     <div class="award-box" style="border-left-color: #00ccff;">
                         <h3 class="award-title" style="color: #00ccff;">🧊 Nerven aus Stahl</h3>
