@@ -1,4 +1,5 @@
 from enum import Enum, auto
+from TurnierLogikDeLuebs import berechne_ko_phase
 
 class TurnierPhase(Enum):
     NICHT_GESTARTET = auto()
@@ -66,14 +67,14 @@ class MatchManager:
                 }
         self._trigger_match_changed()
 
-    def starte_ko_phase(self, ko_matches):
-        #self.phase = "KO_PHASE"
+    def starte_ko_phase(self): # <--- Nimmt keine Parameter mehr entgegen!
         self.phase = TurnierPhase.KO_PHASE       
-        
         self.ko_aktuell_index = 0
-        # NEU: Wir nehmen exakt die Liste, die die Logik liefert, 
-        # ohne manuell noch weitere Runden anzuhängen!
-        self.ko_spielplan = ko_matches 
+        
+        # --- ELA: Der Manager berechnet seinen K.O.-Baum jetzt selbst! ---
+        anzahl = len(self.ergebnisse)
+        self.ko_spielplan = berechne_ko_phase(self.ergebnisse, self.gruppen, anzahl)
+        
         self._trigger_match_changed()
         return True
 
@@ -232,22 +233,36 @@ class MatchManager:
                         self.ergebnisse[s]["differenz"] = self.ergebnisse[s]["score_erzielt"] - self.ergebnisse[s]["score_kassiert"]
 
     def rename_player(self, old_name, new_name):
-        if old_name not in self.ergebnisse or not new_name: return False
-        if old_name in self.teilnehmer: self.teilnehmer[self.teilnehmer.index(old_name)] = new_name
-        
-        for g, players in self.gruppen.items():
-            if old_name in players: players[players.index(old_name)] = new_name
+        # 1. Basics prüfen: Existiert der alte Name und ist der neue Name nicht leer?
+        if old_name not in self.ergebnisse or not new_name: 
+            return False
             
+        # 2. DER SCHUTZWALL: Überschreiben verbieten, um Datenverlust zu verhindern!
+        if new_name in self.ergebnisse: 
+            return False 
+            
+        # 3. Kaskadierendes Update
+        if old_name in self.teilnehmer: 
+            self.teilnehmer[self.teilnehmer.index(old_name)] = new_name
+            
+        for g, players in self.gruppen.items():
+            if old_name in players: 
+                players[players.index(old_name)] = new_name
+                
+        # Den Key im Dictionary austauschen, Werte (Statistiken) behalten
         self.ergebnisse[new_name] = self.ergebnisse.pop(old_name)
         
+        # Gruppenphase updaten
         for m in self.spielplan:
             if m.get("spieler1") == old_name: m["spieler1"] = new_name
             if m.get("spieler2") == old_name: m["spieler2"] = new_name
             
+        # K.O.-Phase updaten
         for m in self.ko_spielplan:
             if m.get("spieler1") == old_name: m["spieler1"] = new_name
             if m.get("spieler2") == old_name: m["spieler2"] = new_name
             if m.get("winner") == old_name: m["winner"] = new_name
+            if m.get("loser") == old_name: m["loser"] = new_name # <-- NEU: Auch den Verlierer umbenennen (wichtig für Spiel um Platz 3)
             
         return True
 

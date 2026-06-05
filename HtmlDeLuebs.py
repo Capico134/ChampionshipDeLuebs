@@ -1,4 +1,5 @@
 import os
+from TurnierLogikDeLuebs import generiere_setzliste
 
 class HtmlExporter:
     def __init__(self, filename="./savegames/Turnierbericht.html"):
@@ -20,8 +21,8 @@ class HtmlExporter:
         
         # Überprüfen, ob überhaupt schon ein einziges Spiel absolviert wurde
         mit_gruppenuebersicht = any(m.get("gespielt", False) for m in spielplan)
-        # Sind ALLE Gruppenspiele gespielt?
-        gruppen_beendet = bool(spielplan) and all(m.get("gespielt", False) for m in spielplan)
+        # Sind ALLE Gruppenspiele gespielt ODER wurde die K.O.-Phase bereits erzwungen?
+        gruppen_beendet = (bool(spielplan) and all(m.get("gespielt", False) for m in spielplan)) or len(ko_spielplan) > 0
         # Ist das Finale gespielt?
         finale = next((m for m in ko_spielplan if m.get("match_nr") == "FIN"), None)
         spiel_um_platz_3 = next((m for m in ko_spielplan if m.get("match_nr") == "3PL"), None)
@@ -289,20 +290,18 @@ class HtmlExporter:
 
             # --- 1. PECHVOGEL (Nur unter den Ausgeschiedenen!) ---
             
-            # Wir extrahieren alle Spieler, die es in die K.O.-Phase geschafft haben.
-            qualifiziert = set()
-            for ko_match in ko_spielplan:
-                p1 = ko_match.get("spieler1", "")
-                p2 = ko_match.get("spieler2", "")
-                if p1 and p1 not in ["?", "Freilos"]: qualifiziert.add(p1)
-                if p2 and p2 not in ["?", "Freilos"]: qualifiziert.add(p2)
+            # Wir nutzen direkt die offizielle TurnierLogik! 
+            # (gruppen_daten hat exakt die passenden Keys für den Parameter 'gruppen')
+            virtuelle_setzliste = generiere_setzliste(ergebnisse, gruppen_daten)
+            limit = 8 if len(virtuelle_setzliste) > 8 else 4
+            
+            qualifiziert = {x["name"] for x in virtuelle_setzliste[:limit]}
             
             # Filter: Wir betrachten nur Spieler, die NICHT weitergekommen sind!
             ausgeschiedene = [s for s in stats if s["n"] not in qualifiziert]
             
             # Nur weitermachen, wenn es überhaupt ausgeschiedene Spieler gibt
             if ausgeschiedene:
-                # NEUE LOGIK: Wir suchen den höchsten Score, runden aber vorher zwingend auf 2 Stellen
                 max_pech_score = max([round(s.get("score_erzielt", 0), 2) for s in ausgeschiedene])
                 
                 # Finde alle Spieler, deren (gerundeter) Score diesem Maximum entspricht

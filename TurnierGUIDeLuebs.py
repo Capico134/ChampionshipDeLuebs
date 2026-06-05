@@ -50,7 +50,7 @@ class TurnierGUI:
         # 3. SPEZIAL-TUNING FÜR DIE TABELLEN (Treeview)
         # Wenn Schriften größer werden, müssen die Zeilen mehr Platz nach oben/unten haben!
         self.style.configure("Treeview.Heading", font=("Segoe UI", groesse_hauptschrift, "bold"))
-        self.style.configure("Treeview", font=("Segoe UI", groesse_hauptschrift - 1), rowheight=32) # rowheight=32 gibt ordentlich Luft!
+        self.style.configure("Treeview", font=("Segoe UI", groesse_hauptschrift - 1), rowheight=25) # rowheight=32 gibt ordentlich Luft!
         # =====================================================================
         
         self.datei_manager = datei_manager
@@ -118,6 +118,34 @@ class TurnierGUI:
 
 
     def setup_ui(self):
+        # ==========================================================
+        # 1. FUSSLIESTE ZUERST EINPACKEN!
+        # (Damit sie ihren Platz fest reserviert und niemals verschwindet)
+        # ==========================================================
+        bottom_bar = ttk.Frame(self.root)
+        bottom_bar.pack(side=tk.BOTTOM, fill=tk.X, padx=10, pady=6)
+
+        # 1a. Status ganz links ankleben
+        self.status_label = ttk.Label(bottom_bar, text="Bereit", font=("Arial", 10))
+        self.status_label.pack(side=tk.LEFT)
+
+        # 1b. Container für Beamer-Controls ganz rechts ankleben
+        beamer_controls = ttk.Frame(bottom_bar)
+        beamer_controls.pack(side=tk.RIGHT)
+
+        self.btn_beamer = ttk.Button(beamer_controls, text="📺 BEAMER-ANZEIGE ÖFFNEN", command=self.open_beamer)
+        self.btn_beamer.pack(side=tk.LEFT, padx=(0, 20))
+
+        ttk.Label(beamer_controls, text="Matches pro Seite:").pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Spinbox(beamer_controls, from_=5, to=50, width=4, textvariable=self.var_matches_per_page).pack(side=tk.LEFT, padx=(0, 15))
+
+        ttk.Label(beamer_controls, text="Gruppen pro Seite:").pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Spinbox(beamer_controls, from_=1, to=10, width=4, textvariable=self.var_groups_per_page).pack(side=tk.LEFT)    
+
+        # ==========================================================
+        # 2. DANN ERST DAS NOTEBOOK ERSTELLEN UND EINPACKEN
+        # (Es füllt jetzt brav nur noch den verbleibenden Platz aus)
+        # ==========================================================
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
 
@@ -136,30 +164,6 @@ class TurnierGUI:
         self.ko_frame = ttk.Frame(self.notebook, padding=20)
         self.notebook.add(self.ko_frame, text=" 4. K.O.-Phase 🏆 ")
         self.build_ko_tab()
-        
-        # ==========================================================
-        # --- NEU: ELA - Kombinierte Fußleiste (Status + Beamer) ---
-        # ==========================================================
-        bottom_bar = ttk.Frame(self.root)
-        bottom_bar.pack(side=tk.BOTTOM, fill=tk.X, padx=10, pady=6)
-
-        # 1. Status ganz links ankleben
-        self.status_label = ttk.Label(bottom_bar, text="Bereit", font=("Arial", 10))
-        self.status_label.pack(side=tk.LEFT)
-
-        # 2. Container für Beamer-Controls ganz rechts ankleben
-        beamer_controls = ttk.Frame(bottom_bar)
-        beamer_controls.pack(side=tk.RIGHT)
-
-        # Innerhalb des Containers von links nach rechts anordnen:
-        self.btn_beamer = ttk.Button(beamer_controls, text="📺 BEAMER-ANZEIGE ÖFFNEN", command=self.open_beamer)
-        self.btn_beamer.pack(side=tk.LEFT, padx=(0, 20))
-
-        ttk.Label(beamer_controls, text="Matches pro Seite:").pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Spinbox(beamer_controls, from_=5, to=50, width=4, textvariable=self.var_matches_per_page).pack(side=tk.LEFT, padx=(0, 15))
-
-        ttk.Label(beamer_controls, text="Gruppen pro Seite:").pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Spinbox(beamer_controls, from_=1, to=10, width=4, textvariable=self.var_groups_per_page).pack(side=tk.LEFT)    
 
     def build_setup_tab(self):
         # --- NEU: ELA-LÖSUNG (Laden direkt im UI statt als Startup-Popup) ---
@@ -266,7 +270,7 @@ class TurnierGUI:
 
         # 3. Treeview (Füllt jetzt automatisch den kompletten restlichen Platz in der Mitte auf!)
         columns = ("nr", "status", "gruppe", "paarung", "punkte", "diff", "pi_id")
-        self.tree_matches = ttk.Treeview(self.control_frame, columns=columns, show="headings", height=12)
+        self.tree_matches = ttk.Treeview(self.control_frame, columns=columns, show="headings", height=6)
         
         for col, txt, w in zip(columns, ["Nr.", "Status", "Gruppe", "Paarung", "Punkte", "Gesamt (Diff)", "Pi-ID"], [40, 80, 60, 200, 80, 140, 60]):
             self.tree_matches.heading(col, text=txt)
@@ -309,7 +313,7 @@ class TurnierGUI:
         # 3. Treeview (Füllt die Mitte)
         # 'phase' zu 'typ' oder 'runde' ändern, damit es sauber ist
         cols = ("nr", "status", "typ", "paarung", "punkte", "diff", "pi_id", "winner")
-        self.tree_ko = ttk.Treeview(self.ko_frame, columns=cols, show="headings", height=10)
+        self.tree_ko = ttk.Treeview(self.ko_frame, columns=cols, show="headings", height=6)
         # Und in der zip-Schleife darunter das Wort "Phase" durch "Runde" oder "Typ" ersetzen:
         for c, t, w in zip(cols, ["Nr.", "Status", "Typ", "Paarung", "Punkte", "Gesamt (Diff)", "Pi-ID", "Sieger"], [40, 80, 100, 200, 80, 140, 60, 120]):
             self.tree_ko.heading(c, text=t); self.tree_ko.column(c, width=w, anchor="center" if c != "paarung" else "w")
@@ -406,18 +410,14 @@ class TurnierGUI:
         # 1. Smarte Warnung anhand der State-Machine
         if getattr(self.match_manager, "phase", None) == TurnierPhase.GRUPPENPHASE:
             msg = "⚠️ ACHTUNG: Die Gruppenphase ist noch NICHT beendet!\n\nMöchtest du die K.O.-Phase wirklich jetzt schon mit dem aktuellen Zwischenstand erzwingen?"
-            # Zeigt ein echtes gelbes Warn-Icon an!
             if not messagebox.askyesno("K.O.-Phase erzwingen", msg, icon='warning'): 
                 return
         else:
             if not messagebox.askyesno("KO Start", "Gruppenphase wirklich beenden?"): 
                 return
         
-        # 2. Die eigentliche Logik ausführen
-        anzahl = len(self.match_manager.ergebnisse) 
-        
-        vf = berechne_ko_phase(self.match_manager.ergebnisse, self.match_manager.gruppen, anzahl)
-        self.match_manager.starte_ko_phase(vf)
+        # 2. Die eigentliche Logik ausführen -> Nur noch ein Befehl!
+        self.match_manager.starte_ko_phase()
         
         # 3. Zentrale Abschlussarbeiten (GUI Update, Speichern & HTML-Druck)
         self._abschluss_routine()
@@ -453,23 +453,48 @@ class TurnierGUI:
         erw_s1, erw_s2 = match["spieler1"], match["spieler2"]
         is_ko = (getattr(self.match_manager, "phase", None) in [TurnierPhase.KO_PHASE, TurnierPhase.BEENDET])
 
+        # --- 1. GRUNDTEXT BAUEN (Je nach Szenario) ---
         if szenario == "STECHEN_AKTIV":
-            return "Stechen bestätigen", f"🔥 ERGEBNIS STECHEN 🔥\n\n{s1}: {b1} Treffer\n{s2}: {b2} Treffer\n\nErgebnis übernehmen und Sieger eintragen?"
+            titel = "Stechen bestätigen"
+            msg = f"🔥 ERGEBNIS STECHEN 🔥\n\n{s1}: {b1} Treffer\n{s2}: {b2} Treffer\n\nErgebnis übernehmen und Sieger eintragen?"
             
         elif szenario == "GLEICHSTAND":
-            return "Fotofinish!", f"🚨 GLEICHSTAND IM K.O.-MATCH! 🚨\nBeide Schützen haben exakt {t1:.2f} Punkte!\n\nSoll das Stechen jetzt gestartet werden?"
+            titel = "Fotofinish!"
+            msg = f"🚨 GLEICHSTAND IM K.O.-MATCH! 🚨\nBeide Schützen haben exakt {t1:.2f} Punkte!\n\nSoll das Stechen jetzt gestartet werden?"
             
         else: # NORMAL
+            titel = "Bestätigen"
             msg = f"Ergebnis vom Pi (Match ID: {pi_id}):\n\n"
             if is_ko: msg += f"[{s1}]\n➔ Wertung: {t1:.3f}  (Treffer: {b1})\n\n[{s2}]\n➔ Wertung: {t2:.3f}  (Treffer: {b2})\n\n"
             else:     msg += f"[{s1}]\n➔ Treffer: {b1}  (Wertung: {t1:.3f})\n\n[{s2}]\n➔ Treffer: {b2}  (Wertung: {t2:.3f})\n\n"
+            msg += "Ergebnis in den Turnierplan übernehmen?"
+
+        # --- 2. WARNUNGEN PRÜFEN UND OBEN ANHÄNGEN ---
+        warnungen = ""
+
+        # Check A: Namens-Abweichung
+        if s1 != erw_s1 or s2 != erw_s2:
+            warnungen += f"⚠️ ACHTUNG: NAMENS-ABWEICHUNG! ⚠️\nErwartet: [{erw_s1}] vs [{erw_s2}]\n\n"
+
+        # Check B: Zeit-Abweichung (Älter als 2 Minuten oder in der Zukunft)
+        timestamp_str = d.get("timestamp", "")
+        if timestamp_str:
+            try:
+                import datetime # Fallback, falls nicht global importiert
+                match_zeit = datetime.datetime.strptime(timestamp_str, "%d.%m.%y %H:%M:%S")
+                differenz_sekunden = (datetime.datetime.now() - match_zeit).total_seconds()
                 
-            if s1 != erw_s1 or s2 != erw_s2:
-                msg += f"⚠️ ACHTUNG: NAMENS-ABWEICHUNG! ⚠️\nErwartet: [{erw_s1}] vs [{erw_s2}]\n"
-                msg += "Möchtest du dieses Ergebnis TROTZDEM eintragen?"
-            else:
-                msg += "Ergebnis in den Turnierplan übernehmen?"
-            return "Bestätigen", msg            
+                if differenz_sekunden > 120 or differenz_sekunden < -120:
+                    warnungen += f"⏱️ ACHTUNG: ZEIT-FEHLER! ⏱️\nDieses Match ist vom {timestamp_str}!\nEntweder ein altes Match, oder die Pi-Uhr geht falsch!\n\n"
+            except ValueError:
+                pass # Falls das Datum mal kaputt formatiert ist, Programm nicht crashen
+
+        # Wenn es eine oder beide Warnungen gab, bauen wir sie prominent ein!
+        if warnungen:
+            msg = f"{warnungen}----------------------------------------\n\n{msg}"
+            titel = "⚠️ WARNUNG: " + titel
+
+        return titel, msg         
 
     def _fuehre_ergebnis_aktion_aus(self, szenario, d):
         b1, b2 = d.get("punkte_durchgang", 0), d.get("punkte_durchgang_pl2", 0)
@@ -734,14 +759,39 @@ class TurnierGUI:
         sel = self.tree_overview.selection()
         if not sel: return
         old_name = self.tree_overview.item(sel[0])['values'][0]
-        d = tk.Toplevel(self.root); d.title("Umbenennen"); d.geometry("300x150"); d.grab_set()
+        
+        d = tk.Toplevel(self.root)
+        d.title("Umbenennen")
+        d.geometry("300x150")
+        d.grab_set()
+        
         ttk.Label(d, text=f"Neuer Name für '{old_name}':").pack(pady=10)
-        ent = ttk.Entry(d, width=20); ent.insert(0, old_name); ent.pack(pady=5)
+        ent = ttk.Entry(d, width=20)
+        ent.insert(0, old_name)
+        ent.pack(pady=5)
+        
         def save():
             new_name = ent.get().strip()
-            if new_name and self.match_manager.rename_player(old_name, new_name):
-                self.update_all_displays(); self.datei_manager.speichere_turnier_stand(self.match_manager.get_state()); d.destroy()
-        ttk.Button(d, text="UMBENNEN", command=save).pack(pady=15)
+            
+            # 1. Abfangen von leeren Namen oder gar keiner Änderung
+            if not new_name or new_name == old_name:
+                return
+                
+            # 2. NEUER SCHUTZWALL: Prüfen, ob der Name schon im System existiert!
+            if new_name in self.match_manager.ergebnisse:
+                msg = (f"⚠️ Namenskonflikt!\n\nDer Name '{new_name}' existiert bereits im Turnier.\n\n"
+                       f"Um Datenverlust zu vermeiden, wähle bitte einen eindeutigen Ersatznamen, "
+                       f"z. B. '{new_name}_für_{old_name}'.")
+                messagebox.showwarning("Fehler beim Umbenennen", msg)
+                return
+
+            # 3. Wenn alles sicher ist, umbenennen!
+            if self.match_manager.rename_player(old_name, new_name):
+                self.update_all_displays()
+                self.datei_manager.speichere_turnier_stand(self.match_manager.get_state())
+                d.destroy()
+                
+        ttk.Button(d, text="UMBENENNEN", command=save).pack(pady=15)
 
     def build_time_inputs(self):
         for widget in self.time_frame.winfo_children(): widget.destroy()
