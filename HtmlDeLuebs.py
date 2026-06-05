@@ -17,17 +17,12 @@ class HtmlExporter:
         if not stats:
             return False, "Keine Daten zum Exportieren vorhanden!"
 
-        # --- NEU: DIE INTELLIGENZ (Zustand aus den Daten ablesen) ---
-        
-        # Überprüfen, ob überhaupt schon ein einziges Spiel absolviert wurde
+        # --- DIE INTELLIGENZ (Zustand aus den Daten ablesen) ---
         mit_gruppenuebersicht = any(m.get("gespielt", False) for m in spielplan)
-        # Sind ALLE Gruppenspiele gespielt ODER wurde die K.O.-Phase bereits erzwungen?
         gruppen_beendet = (bool(spielplan) and all(m.get("gespielt", False) for m in spielplan)) or len(ko_spielplan) > 0
-        # Ist das Finale gespielt?
         finale = next((m for m in ko_spielplan if m.get("match_nr") == "FIN"), None)
         spiel_um_platz_3 = next((m for m in ko_spielplan if m.get("match_nr") == "3PL"), None)
         turnier_beendet = finale is not None and finale.get("gespielt") is True
-        # -------------------------------------------------------------
 
         # 1. Daten nach Gruppen aufteilen und sortieren
         gruppen_daten = {}
@@ -44,10 +39,12 @@ class HtmlExporter:
                 reverse=True
             )
 
-        ## 2. Prüfen, ob das Turnier (Finale) beendet ist
-        #finale = next((m for m in ko_spielplan if m.get("match_nr") == "FIN"), None)
-        #spiel_um_platz_3 = next((m for m in ko_spielplan if m.get("match_nr") == "3PL"), None)
-        #turnier_beendet = finale is not None and finale.get("gespielt") is True
+        # --- OPTIMIERUNG (C): Logik für Qualifikanten nach oben gezogen! ---
+        # So steht sie für Punkt A (Highlighting), Punkt B (Setzliste) und den Pechvogel bereit.
+        virtuelle_setzliste = generiere_setzliste(ergebnisse, gruppen_daten)
+        limit = 8 if len(virtuelle_setzliste) > 8 else 4
+        qualifiziert = {x["name"] for x in virtuelle_setzliste[:limit]}
+        # -------------------------------------------------------------------
 
         # 3. HTML-Grundgerüst bauen
         html = """
@@ -88,7 +85,7 @@ class HtmlExporter:
             <h1>🎯 Bericht 🎯</h1>
         """
 
-        # ---> NEUER BLOCK START: PROJEKT-HEADER <---
+        # PROJEKT-HEADER
         html += """
         <div style="text-align: center; background-color: #252525; padding: 20px; border-radius: 15px; margin: 20px auto; max-width: 760px; border: 2px solid #39FF14;">
             <h2 style="color: #39FF14; margin-top: 0; margin-bottom: 5px; border: none; padding: 0;">Shooting DeLübs</h2>
@@ -110,7 +107,6 @@ class HtmlExporter:
             </div>
         </div>
         """
-        # ---> NEUER BLOCK ENDE <---
 
         # 4. Der Kopfbereich (Podium oder normaler Untertitel)
         if turnier_beendet:
@@ -164,9 +160,15 @@ class HtmlExporter:
                 """
                 
                 for i, s in enumerate(gruppen_daten[gruppe]):
+                    # --- NEU (A): Grünes Highlighting und "Q" für Qualifikanten ---
+                    ist_qualifiziert = gruppen_beendet and s['n'] in qualifiziert
+                    rang_text = "<strong>Q</strong>" if ist_qualifiziert else f"<strong>{i+1}.</strong>"
+                    row_bg = "background-color: rgba(0, 255, 0, 0.12);" if ist_qualifiziert else ""
+                    rang_color = "#00ff00" if ist_qualifiziert else "inherit"
+                    
                     html += f"""
-                        <tr>
-                            <td><strong>{i+1}.</strong></td>
+                        <tr style="{row_bg}">
+                            <td style="color: {rang_color};">{rang_text}</td>
                             <td style="text-align: left;"><strong>{s['n']}</strong></td>
                             <td>{s.get('spiele', 0)}</td>
                             <td style="color: #00ff00; font-weight: bold;">{s.get('punkte', 0)}</td>
@@ -178,8 +180,9 @@ class HtmlExporter:
                     </table>
                 </div>
                 """
+
         # 6. EINZELNE GRUPPENSPIELE
-        if spielplan: #mit_gruppenmatches and 
+        if spielplan: 
             html += "<h2>⚔️ Alle Gruppenspiele</h2>"
             html += """
             <div class="table-container">
@@ -193,7 +196,6 @@ class HtmlExporter:
                     </tr>
             """
             for m in spielplan:
-                # Prüfen, ob das Spiel schon absolviert wurde
                 if m.get("gespielt"):
                     treffer = f"{m.get('base1', 0)} : {m.get('base2', 0)}"
                     gesamt = f"{m.get('total1', 0):.2f} : {m.get('total2', 0):.2f}"
@@ -224,13 +226,12 @@ class HtmlExporter:
                     <tr>
                         <th>Phase</th>
                         <th style="text-align: left;">Paarung</th>
-                        <th>Trefferf</th>
+                        <th>Treffer</th>
                         <th>Match-Wertung</th>
                         <th>Sieger</th>
                     </tr>
             """
             for m in ko_spielplan:
-                # --- ELA FIX: Den Übersetzer fragen! ---
                 match_nr = m.get('match_nr', '')
                 phase = datei_manager.get_match_name(match_nr) if datei_manager else match_nr
                 
@@ -240,11 +241,9 @@ class HtmlExporter:
                     treffer = f"{m.get('base1', 0)} : {m.get('base2', 0)}"
                     gesamt = f"{m.get('total1', 0):.2f} : {m.get('total2', 0):.2f}"
                     
-                    # --- ELA: Stechen-Ergebnis als Unterzeile hinzufügen ---
                     if m.get("stechen_beendet"):
                         stechen_str = f"{m.get('stechen_b1', 0)}:{m.get('stechen_b2', 0)}"
                         gesamt += f"<br><small style='color: #ffd700;'>(ST: {stechen_str})</small>"
-                    # -------------------------------------------------------
                     
                     sieger = f"<span class='highlight-gold'>🏆 {m.get('winner', '')}</span>"
                 else:
@@ -269,16 +268,44 @@ class HtmlExporter:
         # 8. SONDERWERTUNGEN
         if gruppen_beendet:
             html += "<h2>⭐ Sonderwertungen</h2>"
-            
-            # ==========================================
-            # TEIL 1: GRUPPENPHASE
-            # ==========================================
             html += "<h3 style='background-color: transparent; color: #00ff00; border-bottom: 1px solid #333; margin-top: 10px; padding-left: 0;'>🎖️ GRUPPENPHASE</h3>"
             
+            # ==========================================
+            # NEU (B): SETZLISTE FÜR DIE K.O.-PHASE
+            # ==========================================
+            html += """
+                <div class="table-container">
+                    <h3 style="background-color: #1a3a1a; border-bottom: 1px solid #00ff00; color: #00ff00; font-size: 1.1em; padding: 8px;">✅ Die finale Setzliste (Qualifikanten)</h3>
+                    <table>
+                        <tr>
+                            <th>Setzplatz</th>
+                            <th style="text-align: left;">Schütze</th>
+                            <th>Grp.</th>
+                            <th>Punkte</th>
+                            <th>Diff</th>
+                            <th>Gesamtleistung</th>
+                        </tr>
+            """
+            for i, q in enumerate(virtuelle_setzliste[:limit]):
+                html += f"""
+                    <tr style="background-color: rgba(0, 255, 0, 0.08);">
+                        <td style="color: #00ff00;"><strong>{i+1}.</strong></td>
+                        <td style="text-align: left;"><strong>{q['name']}</strong></td>
+                        <td>{q.get('gruppe', '-')}</td>
+                        <td style="color: #00ff00; font-weight: bold;">{q.get('punkte', 0)}</td>
+                        <td style="color: #aaa;">{q.get('differenz', 0):+.2f}</td>
+                        <td class="highlight-gold">{q.get('score_erzielt', 0):.2f}</td>
+                    </tr>
+                """
+            html += """
+                    </table>
+                </div>
+            """
+
+            # Datenaufbereitung für die weiteren Awards
             spieler_scores = {}
             for match in spielplan:
                 if match.get("gespielt"):
-                    # WICHTIG: Manuell genullte / übersprungene Matches ignorieren!
                     if match.get("pi_match_id") == "MANUELL" and match.get("total1", 0) == 0 and match.get("total2", 0) == 0:
                         continue
                         
@@ -289,26 +316,14 @@ class HtmlExporter:
                     if p2: spieler_scores.setdefault(p2, []).append(s2)
 
             # --- 1. PECHVOGEL (Nur unter den Ausgeschiedenen!) ---
-            
-            # Wir nutzen direkt die offizielle TurnierLogik! 
-            # (gruppen_daten hat exakt die passenden Keys für den Parameter 'gruppen')
-            virtuelle_setzliste = generiere_setzliste(ergebnisse, gruppen_daten)
-            limit = 8 if len(virtuelle_setzliste) > 8 else 4
-            
-            qualifiziert = {x["name"] for x in virtuelle_setzliste[:limit]}
-            
-            # Filter: Wir betrachten nur Spieler, die NICHT weitergekommen sind!
+            # (Nutzt jetzt die qualifiziert-Liste von ganz oben!)
             ausgeschiedene = [s for s in stats if s["n"] not in qualifiziert]
             
-            # Nur weitermachen, wenn es überhaupt ausgeschiedene Spieler gibt
             if ausgeschiedene:
                 max_pech_score = max([round(s.get("score_erzielt", 0), 2) for s in ausgeschiedene])
-                
-                # Finde alle Spieler, deren (gerundeter) Score diesem Maximum entspricht
                 pechvoegel = [s["n"] for s in ausgeschiedene if round(s.get("score_erzielt", 0), 2) == max_pech_score]
                 namen_str = " & ".join([f"<strong>{n}</strong>" for n in pechvoegel])
                 
-                # NEUER TEXT: Fokus auf die starke Leistung trotz des Ausscheidens
                 html += f"""
                 <div class="award-box">
                     <h3 class="award-title">🍀 Der "Pechvogel des Tages"</h3>
@@ -323,18 +338,14 @@ class HtmlExporter:
                 name = s["n"]
                 scores = spieler_scores.get(name, [])
                 if len(scores) > 1:
-                    # FIX: Wir runden die Basiswerte ZUERST auf 2 Stellen!
                     min_score = round(min(scores), 2)
                     max_score = round(max(scores), 2)
-                    
-                    # NEUE LOGIK: Verhindert, dass jemand gewinnt, der durchgehend 0 geschossen hat!
                     if max_score > 0:
                         schwankung = round(max_score - min_score, 2)
                         uhrwerk_kandidaten.append((name, schwankung, min_score, max_score))
             
             if uhrwerk_kandidaten:
                 best_schwankung = min([k[1] for k in uhrwerk_kandidaten])
-                # Wir holen uns alle Sieger inklusive ihrer Detail-Werte
                 sieger_uhrwerk = [k for k in uhrwerk_kandidaten if k[1] == best_schwankung]
                 
                 html += f"""
@@ -343,11 +354,8 @@ class HtmlExporter:
                     <p>Präzise wie ein Schweizer Uhrwerk! Die konstanteste Leistung des Tages mit einer minimalen Differenz von nur <span class="highlight-gold">{best_schwankung:.2f} in der Match-Wertung</span>:</p>
                     <ul style="list-style-type: none; padding-left: 0;">
                 """
-                
-                # Für jeden Sieger eine Zeile mit den exakten Werten generieren
                 for (name, schwankung, min_s, max_s) in sieger_uhrwerk:
                     html += f"<li style='margin-bottom: 5px;'><strong>{name}</strong> <em>({min_s:.2f} bis {max_s:.2f})</em></li>"
-                    
                 html += "</ul></div>"
 
             # --- 3. SPÄTZÜNDER (Größte Steigerung) ---
@@ -357,8 +365,6 @@ class HtmlExporter:
                 scores = spieler_scores.get(name, [])
                 if len(scores) > 1:
                     erstes_match = round(scores[0], 2)
-                    
-                    # NEUE LOGIK: Wir vergleichen mit dem LETZTEN Match (scores[-1]), nicht mit dem besten!
                     letztes_match = round(scores[-1], 2)
                     
                     steigerung = round(letztes_match - erstes_match, 2)
@@ -381,7 +387,6 @@ class HtmlExporter:
                 html += "</ul></div>"
 
             # --- TOP 5 TABELLE ---
-            # NEU EINGEFÜGT: Hier wird die Ehrentafel wieder definiert!
             ehrentafel = sorted(stats, key=lambda x: x.get("score_erzielt", 0), reverse=True)
             
             html += """
@@ -390,7 +395,6 @@ class HtmlExporter:
                     <table>
                         <tr><th>Rang</th><th style="text-align: left;">Schütze</th><th>Turnierpunkte</th><th>Gesamtleistung</th></tr>
             """
-            
             for i, s in enumerate(ehrentafel[:5]):
                 rang_icon = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else f"{i+1}."
                 html += f"""
@@ -407,7 +411,7 @@ class HtmlExporter:
             """
 
             # ==========================================
-            # TEIL 2: K.O.-PHASE (Fotofinish & Nerven aus Stahl)
+            # K.O.-PHASE (Fotofinish & Nerven aus Stahl)
             # ==========================================
             fotofinish_matches = []
             min_diff = float('inf')
@@ -416,11 +420,9 @@ class HtmlExporter:
             max_ko_score = -1.0
 
         if turnier_beendet:
-            # K.O.-Daten durchsuchen
             if ko_spielplan:
                 for match in ko_spielplan:
                     if match.get("gespielt"):
-                        # Manuelle Leermatches ignorieren
                         if match.get("pi_match_id") == "MANUELL" and match.get("total1", 0) == 0 and match.get("total2", 0) == 0:
                             continue
                             
@@ -428,11 +430,9 @@ class HtmlExporter:
                         t2 = match.get("total2", 0.0)
                         p1 = match.get("spieler1", "Unbekannt")
                         p2 = match.get("spieler2", "Unbekannt")
-                        # --- ELA FIX: Auch hier den Übersetzer fragen! ---
                         match_nr = match.get("match_nr", "")
                         phase = datei_manager.get_match_name(match_nr) if datei_manager else match_nr
                         
-                        # 1. Fotofinish prüfen (Runden auf 3 Nachkommastellen für sicheren Float-Vergleich)
                         diff = round(abs(t1 - t2), 3)
                         if diff < min_diff:
                             min_diff = diff
@@ -440,7 +440,6 @@ class HtmlExporter:
                         elif diff == min_diff:
                             fotofinish_matches.append((p1, p2, t1, t2, diff, phase))
                             
-                        # 2. Nerven aus Stahl prüfen
                         for score, player in [(round(t1, 2), p1), (round(t2, 2), p2)]:
                             if score > max_ko_score:
                                 max_ko_score = score
@@ -448,11 +447,9 @@ class HtmlExporter:
                             elif score == max_ko_score:
                                 nerven_spieler.append((player, phase))
 
-            # Nur rendern, wenn es K.O.-Matches gab
             if fotofinish_matches or nerven_spieler:
                 html += "<h3 style='background-color: transparent; color: #00ff00; border-bottom: 1px solid #333; margin-top: 40px; padding-left: 0;'>🎖️ K.O.-PHASE</h3>"
                 
-                # --- 4. FOTOFINISH ---
                 if fotofinish_matches:
                     html += f"""
                     <div class="award-box" style="border-left-color: #ff3333;">
@@ -465,7 +462,6 @@ class HtmlExporter:
                         html += f"<li style='margin-bottom: 5px;'><strong>{p1}</strong> ({t1:.2f}) vs <strong>{p2}</strong> ({t2:.2f}) <em>(im {phase})</em></li>"
                     html += "</ul></div>"
                     
-                # --- 5. NERVEN AUS STAHL ---
                 if nerven_spieler and max_ko_score > 0:
                     html += f"""
                     <div class="award-box" style="border-left-color: #00ccff;">
@@ -478,7 +474,6 @@ class HtmlExporter:
                         html += f"<li style='margin-bottom: 5px;'><strong>{name}</strong> <em>(geschossen im {phase})</em></li>"
                     html += "</ul></div>"
                     
-
         html += """
         </body>
         </html>
@@ -488,7 +483,6 @@ class HtmlExporter:
             with open(self.filename, "w", encoding="utf-8") as f:
                 f.write(html)
             
-            # NEU: Öffnet den Browser NUR, wenn silent = False ist (beim manuellen Klick)
             if not silent and os.name == 'nt':
                 absoluter_pfad = os.path.abspath(self.filename)
                 os.startfile(absoluter_pfad)
