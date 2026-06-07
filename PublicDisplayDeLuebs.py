@@ -254,7 +254,11 @@ class PublicDisplay(tk.Toplevel):
                 self.lbl_score_p2.grid(row=2, column=1, sticky="w")
 
                 self.lbl_match_status = tk.Label(self.left_frame, text="Warten auf Start...", font=("Arial", 20, "bold"), bg="#1a1a1a", fg="gray")
-                self.lbl_match_status.pack(anchor="w", pady=(0, 20))
+                self.lbl_match_status.pack(anchor="w", pady=(0, 10))
+
+                # --- NEU: Ein unsichtbarer Container für die Endergebnisse ---
+                self.details_frame = tk.Frame(self.left_frame, bg="#1a1a1a")
+                self.details_frame.pack(anchor="w", pady=(0, 20), fill="x")
 
                 # Wenn es keine Gruppe gibt, jagen wir die match_nr (z.B. 'HF1') durch unseren Übersetzer!
                 gruppen_text = match.get('gruppe', self.datei_manager.get_match_name(match.get('match_nr', '')))
@@ -644,10 +648,10 @@ class PublicDisplay(tk.Toplevel):
         self.scroll_job = self.after(20, self.scroll_text)            
         
     #AB HIER LIVE TICKER
-    def update_live_score(self, p1_points, p2_points, status):
+    def update_live_score(self, p1_points, p2_points, status, p1_base=0, p2_base=0, p1_total=0.0, p2_total=0.0):
         """Aktualisiert die Live-Punkte und den Status auf dem Beamer."""
         
-        # 1. Punktestand immer aktualisieren (sofern physisch noch auf dem Bildschirm vorhanden)
+        # 1. Punktestand immer aktualisieren
         if p1_points is not None:
             if hasattr(self, 'lbl_score_p1') and self.lbl_score_p1.winfo_exists():
                 self.lbl_score_p1.config(text=str(p1_points))
@@ -656,13 +660,42 @@ class PublicDisplay(tk.Toplevel):
             if hasattr(self, 'lbl_score_p2') and self.lbl_score_p2.winfo_exists():
                 self.lbl_score_p2.config(text=str(p2_points))
 
-        # 2. Status-Logik nach deinem sauberen Workflow (auch hier prüfen, ob das Label existiert)
+        # 2. Status-Logik & Ergebnis-Block
         if hasattr(self, 'lbl_match_status') and self.lbl_match_status.winfo_exists():
             if status == "SICHERHEIT":
                 self.lbl_match_status.config(text="🏁 MATCH BEENDET 🏁", fg="white")
+                
+                # --- NEU: Endergebnisse einblenden ---
+                if hasattr(self, 'details_frame') and self.details_frame.winfo_exists():
+                    # Frame vorher leeren, damit es nicht doppelt reingeschrieben wird
+                    for widget in self.details_frame.winfo_children(): widget.destroy()
+                    
+                    phase = getattr(self.match_manager, 'phase', TurnierPhase.NICHT_GESTARTET)
+                    is_ko = phase in [TurnierPhase.KO_PHASE, TurnierPhase.BEENDET]
+                    
+                    diff = abs(p1_total - p2_total)
+                    
+                    # Turnierpunkte berechnen (nur für Gruppenphase interessant)
+                    if not is_ko:
+                        if p1_base > p2_base: tp1, tp2 = 3, 0
+                        elif p1_base < p2_base: tp1, tp2 = 0, 3
+                        else: tp1, tp2 = 1, 1
+                        
+                        tk.Label(self.details_frame, text=f"Turnierpunkte: {tp1} : {tp2}", font=("Arial", 18, "bold"), bg="#1a1a1a", fg="#00ff00").pack(anchor="w", pady=2)
+                    
+                    # Match-Wertung und Differenz anzeigen
+                    tk.Label(self.details_frame, text=f"Match-Wertung: {p1_total:.2f} : {p2_total:.2f}", font=("Arial", 16), bg="#1a1a1a", fg="#ffd700").pack(anchor="w", pady=2)
+                    tk.Label(self.details_frame, text=f"Differenz: {diff:.2f}", font=("Arial", 16), bg="#1a1a1a", fg="#aaaaaa").pack(anchor="w", pady=2)
+                    
             elif status == "WARTEN":
-                # Das senden wir manuell aus der GUI bei "ERGEBNIS ABHOLEN"
                 self.lbl_match_status.config(text="Warten auf Start...", fg="gray")
+                self._clear_details() # Endergebnisse wieder ausblenden
             elif status != "":
-                # EGAL welcher andere Status vom Pi kommt (FEUER, LADEN, BEREIT, etc.)
                 self.lbl_match_status.config(text="🔥 MATCH LÄUFT 🔥", fg="red")
+                self._clear_details() # Endergebnisse wieder ausblenden
+
+    def _clear_details(self):
+        """Hilfsfunktion: Löscht die Endergebnisse vom Bildschirm"""
+        if hasattr(self, 'details_frame') and self.details_frame.winfo_exists():
+            for widget in self.details_frame.winfo_children(): 
+                widget.destroy()

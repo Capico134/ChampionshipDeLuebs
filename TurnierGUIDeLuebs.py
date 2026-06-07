@@ -928,9 +928,13 @@ class TurnierGUI:
                         p1_score = str(p1_treffer)
                         p2_score = str(p2_treffer)
                             
-                    # Finalen Stand an den Beamer senden
+                    # Finalen Stand an den Beamer senden (mit Zusatzdaten für das Endergebnis)
                     if self.beamer_window and tk.Toplevel.winfo_exists(self.beamer_window):
-                        self.beamer_window.update_live_score(p1_score, p2_score, current_status)
+                        self.beamer_window.update_live_score(
+                            p1_score, p2_score, current_status,
+                            p1_base=p1_treffer, p2_base=p2_treffer,
+                            p1_total=(p1_treffer + p1_speed), p2_total=(p2_treffer + p2_speed)
+                        )
                         
             except Exception as e:
                 print(f"⚠️ [{zeit_jetzt}] Fehler in check_live_data: {e}")
