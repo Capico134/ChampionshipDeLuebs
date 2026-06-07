@@ -61,11 +61,24 @@ class TurnierGUI:
         self.version = version
         self.time_entries = {}
         self.html_exporter = HtmlExporter()
-        self.beamer_window = None
-        self.auto_beamer = auto_beamer # Speichern wir uns für den Motorstart
-        self.last_mtime = 0            # Variable anlegen, aber noch nix starten!
         
-        self.quick_messages = self.datei_manager.ticker_templates       
+        
+        self.beamer_window = None
+        self.auto_beamer = auto_beamer 
+        
+        # --- ELA-CLEANUP: Alle Status- und Live-Variablen zentral deklarieren ---
+        self.last_raw_data = ""           # Ersetzt das alte self.last_mtime
+        self.live_match_finished = False  
+        
+        # --- Tkinter Kontroll-Variablen (Kein "Erfinden" mehr in den Sub-Routinen!) ---
+        self.var_matches_per_page = tk.IntVar(value=20)
+        self.var_groups_per_page = tk.IntVar(value=3)
+        self.gruppen_groesse_var = tk.IntVar(value=4)
+        self.zufall_var = tk.BooleanVar(value=True)
+        self.ticker_var = tk.StringVar() 
+        # -------------------------------------------------------------------------
+
+        self.quick_messages = self.datei_manager.ticker_templates     
         
         # 2. Fenster definieren
         self.root.title(f"Championship DeLübs v{self.version}")
@@ -185,11 +198,11 @@ class TurnierGUI:
         rahmen_top.pack(fill=tk.X, pady=(0, 10))
 
         ttk.Label(rahmen_top, text="Gruppengröße:", font=("Arial", 12)).pack(side=tk.LEFT, padx=(0, 10))
-        self.gruppen_groesse_var = tk.IntVar(value=4) 
+        #self.gruppen_groesse_var = tk.IntVar(value=4) 
         ttk.Spinbox(rahmen_top, from_=2, to=8, textvariable=self.gruppen_groesse_var, width=5, font=("Arial", 12)).pack(side=tk.LEFT)
 
         # --- NEU: Der Checkbutton für Zufallsgruppen ---
-        self.zufall_var = tk.BooleanVar(value=True) # Standardmäßig an
+        #self.zufall_var = tk.BooleanVar(value=True) # Standardmäßig an
         ttk.Checkbutton(
             rahmen_top, 
             text="Spieler zufällig auf Gruppen verteilen", 
@@ -248,10 +261,7 @@ class TurnierGUI:
         # 1. Ticker-Frame (Ganz unten ankleben)
         ticker_frame_grp = ttk.LabelFrame(self.control_frame, text=" 📢 Regie-Nachricht an Beamer senden ", padding=5)
         ticker_frame_grp.pack(side=tk.BOTTOM, fill=tk.X, pady=(10, 0))
-        
-        if not hasattr(self, 'ticker_var'):
-            self.ticker_var = tk.StringVar() 
-            
+           
         combo_grp = ttk.Combobox(ticker_frame_grp, values=self.quick_messages, state="readonly", width=30)
         combo_grp.set("Vorlagen auswählen...")
         combo_grp.pack(side=tk.LEFT, padx=5)
@@ -851,50 +861,38 @@ class TurnierGUI:
 #AB HIER LIVE POLLING
         
     def start_live_polling(self):
-        self.last_mtime = 0
-        # Flag, um sich zu merken, ob das Match im "SICHERHEIT"-Modus ist
+        # WICHTIG: Statt der Uhrzeit (last_mtime) merken wir uns jetzt den Text!
+        self.last_raw_data = "" 
         self.live_match_finished = False 
         self.check_live_data()
 
     def check_live_data(self):
-
-        
         live_file = self.datei_manager.live_ticker_path
-        zeit_jetzt = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3] # <--- WICHTIG: Zeit generieren
+        zeit_jetzt = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
         
         # 1. GIBT ES DIE DATEI ÜBERHAUPT?
         if not os.path.exists(live_file):
-            # Damit die Konsole nicht alle 500ms zugespamt wird, loggen wir das Löschen nur einmalig
-            #if self.last_mtime != 0:
-            #    print(f"\n🗑️  [{zeit_jetzt}] live_ticker.json existiert NICHT (wurde gelöscht).")
-            #    print(f"📺  BEAMER-ANSCHLUSS -> Setze auf: 0 : 0 | Status: 'WARTEN'")
-            #    print("="*80 + "\n")            
-            
-            # Keine Datei = Match ist abgerechnet oder noch keines gestartet
             if self.beamer_window and tk.Toplevel.winfo_exists(self.beamer_window):
                 self.beamer_window.update_live_score(0, 0, "WARTEN")
-            self.last_mtime = 0
+            # Cache leeren, wenn das Match vorbei ist
+            self.last_raw_data = ""  
         else:
-            # 2. DATEI IST DA -> MATCH LÄUFT!
-            current_mtime = os.path.getmtime(live_file)
-            
-            if current_mtime > self.last_mtime:
-                try:
-                    with open(live_file, "r") as f:
-                        data = json.load(f)
+            # 2. DATEI IST DA -> DER SMB CACHE-BUSTER!
+            try:
+                # Wir fragen Windows nicht nach der Uhrzeit, sondern lesen die Datei knallhart aus!
+                with open(live_file, "r", encoding="utf-8") as f:
+                    raw_data = f.read()
 
-                    ## --- START DER DIAGNOSE-ÜBERSCHRIFT ---
-                    #print(f"\n📅 ==================== [ LIVE-TICKER UPDATE: {zeit_jetzt} ] ====================")
-                    #print(f"📄 ROHDATEN AUS DATEI (Änderungszeit: {datetime.datetime.fromtimestamp(current_mtime).strftime('%H:%M:%S.%f')[:-3]}):")
-                    ## Wir geben die JSON schön formatiert aus, damit man alles sieht
-                    #print(json.dumps(data, indent=4))
-                    #print("-" * 50)
-
+                # <--- HIER IST DIE NEUE MAGIE --->
+                # Hat sich inhaltlich auch nur EIN Zeichen verändert?
+                if raw_data != self.last_raw_data and raw_data.strip():
+                    self.last_raw_data = raw_data
                     
-                    # Falls du später mal {"metadata": ..., "timeline": [...]} nutzt:
+                    # Erst wenn der Text neu ist, wandeln wir ihn in ein JSON-Objekt um
+                    data = json.loads(raw_data) 
+                    
                     timeline = data.get("timeline", []) if isinstance(data, dict) else data
                     
-                    # --- NEU: ELA-Variablen für getrennte Werte ---
                     p1_treffer, p2_treffer = 0, 0
                     p1_speed, p2_speed = 0.0, 0.0
                     current_status = ""
@@ -906,21 +904,17 @@ class TurnierGUI:
                         current_status = ev.get("m", "")
                         a = ev.get("a", "")
                         
-                        # DIE ENTSCHEIDENDE LOGIK:
                         if a == "shoot" and current_status not in ruhephasen:
-                            # Im aktiven Match: Basis + aktueller Zyklus addieren
                             p1_treffer = ev.get("p1_pd", 0) + ev.get("p1_pz", 0)
                             p2_treffer = ev.get("p2_pd", 0) + ev.get("p2_pz", 0)
                             p1_speed   = ev.get("p1_spd", 0.0) + ev.get("p1_spz", 0.0)
                             p2_speed   = ev.get("p2_spd", 0.0) + ev.get("p2_spz", 0.0)
                         elif current_status in ruhephasen:
-                            # In Pausen/Sicherheit: Nur Basis-Werte nutzen (Zyklus ist 0 oder schon verbucht)
                             p1_treffer = ev.get("p1_pd", 0)
                             p2_treffer = ev.get("p2_pd", 0)
                             p1_speed   = ev.get("p1_spd", 0.0)
                             p2_speed   = ev.get("p2_spd", 0.0)
                         else:
-                            # <--- WICHTIG: Das fehlende Auffangbecken für reine Status-Wechsel!
                             p1_treffer = ev.get("p1_pd", 0)
                             p2_treffer = ev.get("p2_pd", 0)
                             p1_speed   = ev.get("p1_spd", 0.0)
@@ -928,29 +922,21 @@ class TurnierGUI:
 
                     is_ko = getattr(self.match_manager, "phase", None) in [TurnierPhase.KO_PHASE, TurnierPhase.BEENDET]
                     if is_ko and not self.match_manager.get_aktuelles_match().get("stechen_notwendig"):
-                        # K.O.-Phase (Normal): Speedpunkte addieren & auf 2 Nachkommastellen runden
                         p1_score = f"{(p1_treffer + p1_speed):.2f}"
                         p2_score = f"{(p2_treffer + p2_speed):.2f}"
                     else:
-                        # Gruppenphase ODER Stechen: Nur reine Treffer anzeigen
                         p1_score = str(p1_treffer)
                         p2_score = str(p2_treffer)
-
-                    # --- DIAGNOSE: WAS MACHT DER BEAMER DRAUS? ---
-                    #print(f"📺 BEAMER-BERECHNUNG -> P1: {p1_score} | P2: {p2_score} | Status: '{current_status}'")
-                    #print("=" * 82 + "\n")
                             
                     # Finalen Stand an den Beamer senden
                     if self.beamer_window and tk.Toplevel.winfo_exists(self.beamer_window):
                         self.beamer_window.update_live_score(p1_score, p2_score, current_status)
                         
-                    self.last_mtime = current_mtime
-                    
-                except Exception as e:
-                    # <--- WICHTIG: Den Fehler ausgeben statt verschweigen!
-                    print(f"⚠️ [{zeit_jetzt}] Fehler in check_live_data: {e}")
+            except Exception as e:
+                print(f"⚠️ [{zeit_jetzt}] Fehler in check_live_data: {e}")
 
-        self.root.after(500, self.check_live_data)
+        # Deine perfekte 333ms-Lösung:
+        self.root.after(333, self.check_live_data)
 
 #NETZWERKFREIGABE:       
 #sudo nano /etc/samba/smb.conf  

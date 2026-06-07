@@ -52,13 +52,15 @@ class HtmlExporter:
         <html lang="de">
         <head>
             <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <meta name="viewport" content="width=850">
             <title>Shooting DeLübs - Turnierbericht</title>
             <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
             <meta http-equiv="pragma" content="no-cache">
             <meta http-equiv="expires" content="0">
             <style>
-                body { background-color: #1a1a1a; color: white; font-family: 'Segoe UI', Arial, sans-serif; padding: 15px; line-height: 1.6; }
+                /* 1. Allgemeinen Hintergrund dunkler machen für maximalen Kontrast <-- NEU */
+                body { background-color: #111111; color: white; font-family: 'Segoe UI', Arial, sans-serif; padding: 15px; line-height: 1.6; }
+                
                 h1 { color: #00ff00; text-align: center; font-size: 2.2em; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 5px; }
                 h2 { color: #00ff00; border-bottom: 2px solid #333; padding-bottom: 8px; margin-top: 30px; }
                 h3 { color: #ffffff; background-color: #333; padding: 10px; margin-bottom: 0; border-top-left-radius: 5px; border-top-right-radius: 5px; }
@@ -67,7 +69,7 @@ class HtmlExporter:
                 th, td { border: 1px solid #444; padding: 10px; text-align: center; }
                 th { background-color: #2a2a2a; color: #00ff00; font-weight: bold; }
                 tr:nth-child(even) { background-color: #262626; }
-                .highlight-gold { color: #ffd700; font-weight: bold; }
+                .highlight-gold { color: #ffd700; font-weight: normal; }
                 .award-box { background-color: #222; max-width: 760px; margin: 20px auto; padding: 15px; border-left: 6px solid #ffcc00; }
                 .award-title { color: #ffcc00; margin-top: 0; font-size: 1.3em; }
                 
@@ -79,6 +81,15 @@ class HtmlExporter:
                 .step-2 { background: linear-gradient(to bottom, #E0E0E0, #909090); height: 110px; z-index: 2; }
                 .step-3 { background: linear-gradient(to bottom, #CD7F32, #8B4513); height: 70px; z-index: 1; }
                 .podium-medal { font-size: 2em; margin-bottom: -5px; }
+                
+                /* 2. BEIDE Klassen bekommen nun einen schicken Rahmen und Schatten <-- NEU */
+                .section-block { padding: 15px 20px; border-radius: 12px; margin-bottom: 30px; }
+                
+                /* Der etwas hellere Block */
+                .bg-light { background-color: #2c2c2c; border: 1px solid #333; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+                
+                /* Der etwas dunklere Block (aber immer noch heller als der neue tiefe Hintergrund!) */
+                .bg-dark { background-color: #181818; border: 1px solid #262626; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }                
             </style>
         </head>
         <body>
@@ -140,8 +151,17 @@ class HtmlExporter:
             <p style="text-align: center; color: #aaa; margin-top: 0;">Aktuelle Tabellenstände und Platzierungen</p>
             """
 
+        # --- DER AUTOMATISCHE FARB-SCHALTER ---
+        use_light_bg = True
+        def get_section_start():
+            nonlocal use_light_bg
+            cls = "bg-light" if use_light_bg else "bg-dark"
+            use_light_bg = not use_light_bg
+            return f'<div class="section-block {cls}">'
+        
         # 5. GRUPPENÜBERSICHT
         if mit_gruppenuebersicht:
+            html += get_section_start() # <-- NEU: Hier öffnen wir den Rahmen!
             html += "<h2>📊 Die Gruppenphase</h2>"
             
             for gruppe in sorted(gruppen_daten.keys()):
@@ -150,19 +170,18 @@ class HtmlExporter:
                     <h3>GRUPPE {gruppe}</h3>
                     <table>
                         <tr>
-                            <th>Pl.</th>
+                            <th>Platz</th>
                             <th style="text-align: left;">Name</th>
-                            <th>Sp</th>
-                            <th>Pkt</th>
+                            <th>Spiele</th>
+                            <th>Turnierpunkte</th>
                             <th>Diff</th>
                             <th>Gesamt</th>
                         </tr>
                 """
                 
                 for i, s in enumerate(gruppen_daten[gruppe]):
-                    # --- NEU (A): Grünes Highlighting und "Q" für Qualifikanten ---
                     ist_qualifiziert = gruppen_beendet and s['n'] in qualifiziert
-                    rang_text = "<strong>Q</strong>" if ist_qualifiziert else f"<strong>{i+1}.</strong>"
+                    rang_text = f"<strong>{i+1}. Q</strong>" if ist_qualifiziert else f"<strong>{i+1}.</strong>"
                     row_bg = "background-color: rgba(0, 255, 0, 0.12);" if ist_qualifiziert else ""
                     rang_color = "#00ff00" if ist_qualifiziert else "inherit"
                     
@@ -172,7 +191,7 @@ class HtmlExporter:
                             <td style="text-align: left;"><strong>{s['n']}</strong></td>
                             <td>{s.get('spiele', 0)}</td>
                             <td style="color: #00ff00; font-weight: bold;">{s.get('punkte', 0)}</td>
-                            <td style="color: #aaa;">{s.get('differenz', 0):+.2f}</td>
+                            <td style="color: #ffffff;">{s.get('differenz', 0):+.2f}</td>
                             <td class="highlight-gold">{s.get('score_erzielt', 0):.2f}</td>
                         </tr>
                     """
@@ -180,9 +199,12 @@ class HtmlExporter:
                     </table>
                 </div>
                 """
+            html += "</div>" # <-- NEU: Rahmen wieder schließen!
+
 
         # 6. EINZELNE GRUPPENSPIELE
         if spielplan: 
+            html += get_section_start()
             html += "<h2>⚔️ Alle Gruppenspiele</h2>"
             html += """
             <div class="table-container">
@@ -191,34 +213,46 @@ class HtmlExporter:
                         <th>Nr.</th>
                         <th>Grp</th>
                         <th style="text-align: left;">Paarung</th>
+                        <th>Turnierpunkte</th>
                         <th>Treffer</th>
                         <th>Match-Wertung</th>
                     </tr>
             """
             for m in spielplan:
                 if m.get("gespielt"):
-                    treffer = f"{m.get('base1', 0)} : {m.get('base2', 0)}"
+                    b1, b2 = m.get('base1', 0), m.get('base2', 0)
+                    treffer = f"{b1} : {b2}"
                     gesamt = f"{m.get('total1', 0):.2f} : {m.get('total2', 0):.2f}"
+                    
+                    # --- NEU: Punkte für die neue Spalte berechnen ---
+                    if b1 > b2: t_punkte = "3 : 0"
+                    elif b1 < b2: t_punkte = "0 : 3"
+                    else: t_punkte = "1 : 1"
                 else:
                     treffer = "- : -"
                     gesamt = "- : -"
+                    t_punkte = "- : -"
 
                 html += f"""
                     <tr>
-                        <td style="color: #aaa;">{m.get('match_nr', '-')}</td>
-                        <td style="color: #aaa;">{m.get('gruppe', '-')}</td>
+                        <td style="color: #ffffff;">{m.get('match_nr', '-')}</td>
+                        <td style="color: #ffffff;">{m.get('gruppe', '-')}</td>
                         <td style="text-align: left;"><strong>{m.get('spieler1', '')}</strong> vs. <strong>{m.get('spieler2', '')}</strong></td>
-                        <td style="color: #00ff00; font-weight: bold;">{treffer}</td>
-                        <td style="color: #aaa;">{gesamt}</td>
+                        <td style="color: #00ff00; font-weight: bold;">{t_punkte}</td>
+                        <td style="color: #ffffff; font-weight: bold;">{treffer}</td>
+                        <td style="color: #ffd700;">{gesamt}</td>
                     </tr>
                 """
             html += """
                 </table>
             </div>
             """
+            html += "</div>" # <-- NEU: Rahmen wieder schließen!
+
 
         # 7. DIE K.O.-PHASE
         if ko_spielplan: 
+            html += get_section_start() 
             html += "<h2>🏆 Die K.O.-Phase</h2>"
             html += """
             <div class="table-container">
@@ -226,8 +260,8 @@ class HtmlExporter:
                     <tr>
                         <th>Phase</th>
                         <th style="text-align: left;">Paarung</th>
-                        <th>Treffer</th>
                         <th>Match-Wertung</th>
+                        <th>Treffer</th>
                         <th>Sieger</th>
                     </tr>
             """
@@ -253,10 +287,10 @@ class HtmlExporter:
 
                 html += f"""
                     <tr>
-                        <td style="color: #aaa;">{phase}</td>
+                        <td style="color: #ffffff;">{phase}</td>
                         <td style="text-align: left;">{paarung}</td>
-                        <td style="color: #00ff00; font-weight: bold;">{treffer}</td>
-                        <td style="color: #aaa;">{gesamt}</td>
+                        <td style="color: #00ff00; font-weight: bold;">{gesamt}</td>
+                        <td style="color: #ffffff;">{treffer}</td>
                         <td>{sieger}</td>
                     </tr>
                 """
@@ -264,14 +298,19 @@ class HtmlExporter:
                 </table>
             </div>
             """
+            html += "</div>" # <-- NEU: Rahmen wieder schließen!
+
+
 
         # 8. SONDERWERTUNGEN
         if gruppen_beendet:
-            html += "<h2>⭐ Sonderwertungen</h2>"
+            html += "<h2 style='border-bottom: none; border-top: 2px solid #333; padding-top: 20px; margin-top: 40px;'>⭐ Sonderwertungen</h2>"
+            
+            html += get_section_start()
             html += "<h3 style='background-color: transparent; color: #00ff00; border-bottom: 1px solid #333; margin-top: 10px; padding-left: 0;'>🎖️ GRUPPENPHASE</h3>"
             
             # ==========================================
-            # NEU (B): SETZLISTE FÜR DIE K.O.-PHASE
+            # SETZLISTE FÜR DIE K.O.-PHASE
             # ==========================================
             html += """
                 <div class="table-container">
@@ -293,7 +332,7 @@ class HtmlExporter:
                         <td style="text-align: left;"><strong>{q['name']}</strong></td>
                         <td>{q.get('gruppe', '-')}</td>
                         <td style="color: #00ff00; font-weight: bold;">{q.get('punkte', 0)}</td>
-                        <td style="color: #aaa;">{q.get('differenz', 0):+.2f}</td>
+                        <td style="color: #ffffff;">{q.get('differenz', 0):+.2f}</td>
                         <td class="highlight-gold">{q.get('score_erzielt', 0):.2f}</td>
                     </tr>
                 """
@@ -302,7 +341,6 @@ class HtmlExporter:
                 </div>
             """
 
-            # Datenaufbereitung für die weiteren Awards
             spieler_scores = {}
             for match in spielplan:
                 if match.get("gespielt"):
@@ -315,10 +353,8 @@ class HtmlExporter:
                     if p1: spieler_scores.setdefault(p1, []).append(s1)
                     if p2: spieler_scores.setdefault(p2, []).append(s2)
 
-            # --- 1. PECHVOGEL (Nur unter den Ausgeschiedenen!) ---
-            # (Nutzt jetzt die qualifiziert-Liste von ganz oben!)
+            # --- 1. PECHVOGEL ---
             ausgeschiedene = [s for s in stats if s["n"] not in qualifiziert]
-            
             if ausgeschiedene:
                 max_pech_score = max([round(s.get("score_erzielt", 0), 2) for s in ausgeschiedene])
                 pechvoegel = [s["n"] for s in ausgeschiedene if round(s.get("score_erzielt", 0), 2) == max_pech_score]
@@ -332,7 +368,7 @@ class HtmlExporter:
                 </div>
                 """
 
-            # --- 2. UHRWERK (Geringste Schwankung) ---
+            # --- 2. UHRWERK ---
             uhrwerk_kandidaten = []
             for s in stats:
                 name = s["n"]
@@ -358,7 +394,7 @@ class HtmlExporter:
                     html += f"<li style='margin-bottom: 5px;'><strong>{name}</strong> <em>({min_s:.2f} bis {max_s:.2f})</em></li>"
                 html += "</ul></div>"
 
-            # --- 3. SPÄTZÜNDER (Größte Steigerung) ---
+            # --- 3. SPÄTZÜNDER ---
             spaetzuender_kandidaten = []
             for s in stats:
                 name = s["n"]
@@ -409,6 +445,8 @@ class HtmlExporter:
                     </table>
                 </div>
             """
+            html += "</div>" # <-- NEU: Rahmen der GRUPPENPHASEN-Awards wieder schließen!
+
 
             # ==========================================
             # K.O.-PHASE (Fotofinish & Nerven aus Stahl)
@@ -448,7 +486,8 @@ class HtmlExporter:
                                 nerven_spieler.append((player, phase))
 
             if fotofinish_matches or nerven_spieler:
-                html += "<h3 style='background-color: transparent; color: #00ff00; border-bottom: 1px solid #333; margin-top: 40px; padding-left: 0;'>🎖️ K.O.-PHASE</h3>"
+                html += get_section_start()
+                html += "<h3 style='background-color: transparent; color: #00ff00; border-bottom: 1px solid #333; margin-top: 10px; padding-left: 0;'>🎖️ K.O.-PHASE</h3>"
                 
                 if fotofinish_matches:
                     html += f"""
@@ -473,6 +512,8 @@ class HtmlExporter:
                     for (name, phase) in nerven_spieler:
                         html += f"<li style='margin-bottom: 5px;'><strong>{name}</strong> <em>(geschossen im {phase})</em></li>"
                     html += "</ul></div>"
+                    
+                html += "</div>" # <-- NEU: Rahmen der K.O.-PHASEN-Awards wieder schließen!
                     
         html += """
         </body>

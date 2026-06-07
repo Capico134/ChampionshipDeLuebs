@@ -1,5 +1,8 @@
 import tkinter as tk
 from tkinter import font
+import os # <-- NEU: Um zu prüfen, ob das Bild existiert
+from PIL import Image, ImageTk # <-- NEU: Für gestochen scharfe PNG-Skalierung
+
 from TurnierLogikDeLuebs import generiere_setzliste
 from MatchManagerDeLuebs import TurnierPhase
 import math
@@ -139,11 +142,71 @@ class PublicDisplay(tk.Toplevel):
         self.columnconfigure(1, weight=1, uniform="equal_cols")
         self.rowconfigure(1, weight=1)
 
-        # HIER: 'header' in 'self.header_label' ändern!
-        self.header_label = tk.Label(self, text="SHOOTING DELÜBS - MEISTERSCHAFT", 
-                          font=("Arial", 36, "bold"), bg="#333", fg="white", pady=15)
-        self.header_label.grid(row=0, column=0, columnspan=2, sticky="ew")
+        # ========================================================
+        # --- ELA SYMMETRISCHER HEADER MIT ZWEI LOGOS (50:50) ---
+        # ========================================================
+        self.header_frame = tk.Frame(self, bg="#333")
+        self.header_frame.grid(row=0, column=0, columnspan=2, sticky="ew")
 
+        # Wir laden das Bild einmal zentral (Proportionale Skalierung bleibt!)
+        self.logo_photo = None
+        logo_pfad = "Logo.png"
+        logo_meisterschaft = "LogoMeisterschaft.png"
+
+        if os.path.exists(logo_pfad):
+            try:
+                pil_image = Image.open(logo_pfad)
+                orig_breite, orig_hoehe = pil_image.size
+                neue_hoehe = 80
+                neue_breite = int(orig_breite * (neue_hoehe / orig_hoehe))
+                pil_image = pil_image.resize((neue_breite, neue_hoehe), Image.Resampling.LANCZOS)
+                self.logo_photo = ImageTk.PhotoImage(pil_image)
+            except Exception as e:
+                print(f"Warnung: Logo-Datei konnte nicht verarbeitet werden - {e}")
+
+        if os.path.exists(logo_meisterschaft):
+            try:
+                pil_image2 = Image.open(logo_meisterschaft)
+                orig_breite, orig_hoehe = pil_image2.size
+                neue_hoehe = 80
+                neue_breite = int(orig_breite * (neue_hoehe / orig_hoehe))
+                pil_image2 = pil_image2.resize((neue_breite, neue_hoehe), Image.Resampling.LANCZOS)
+                self.logo_photo2 = ImageTk.PhotoImage(pil_image2)
+            except Exception as e:
+                print(f"Warnung: Logo-Datei konnte nicht verarbeitet werden - {e}")
+
+
+        # 1. LINKES LOGO (Genau mittig in der linken Bildhälfte ausrichten)
+        if self.logo_photo:
+            # --- FIX: neue_breite1 nutzen ---
+            # Wir holen uns die Breite direkt aus dem fertigen PhotoImage-Objekt, das ist am sichersten!
+            breite_links = self.logo_photo.width()
+            padding_links = max(10, int(320 - (breite_links / 2)))
+            
+            self.lbl_logo_left = tk.Label(self.header_frame, image=self.logo_photo, bg="#333")
+            self.lbl_logo_left.pack(side="left", padx=(padding_links, 0))
+
+        # 2. RECHTES LOGO (Genau mittig in der rechten Bildhälfte ausrichten)
+        if self.logo_photo2:
+            # --- FIX: Breite von Logo 2 nutzen ---
+            breite_rechts = self.logo_photo2.width()
+            padding_rechts = max(10, int(320 - (breite_rechts / 2)))
+            
+            self.lbl_logo_right = tk.Label(self.header_frame, image=self.logo_photo2, bg="#333")
+            self.lbl_logo_right.pack(side="right", padx=(0, padding_rechts))
+
+
+
+        # 3. DIE MITTEN-ÜBERSCHRIFT (Schwebt zentriert dazwischen)
+        self.header_label = tk.Label(self.header_frame, text="-",#SHOOTING DELÜBS - MEISTERSCHAFT", 
+                          font=("Arial", 36, "bold"), bg="#333", fg="white", pady=15)
+        
+        # Durch expand=True und fill="both" nimmt sich der Text den kompletten Raum 
+        # ZWISCHEN den beiden Logos und zentriert die Schrift perfekt auf der X-Achse
+        self.header_label.pack(side="left", expand=True, fill="both")
+        # ========================================================
+    
+        # 3. Restliches
         # Linke Seite (Wird dynamisch befüllt)
         self.left_frame = tk.Frame(self, bg="#1a1a1a", padx=40, pady=40)
         self.left_frame.grid(row=1, column=0, sticky="nsew")
@@ -154,7 +217,6 @@ class PublicDisplay(tk.Toplevel):
 
         self.table_container = tk.Frame(self.right_frame, bg="#222")
         self.table_container.pack(fill="both", expand=True)
-
     def refresh_display(self):
         match = self.match_manager.get_aktuelles_match()
         next_m = self.match_manager.get_naechstes_match()
@@ -323,9 +385,11 @@ class PublicDisplay(tk.Toplevel):
             if self.timer_id:
                 self.after_cancel(self.timer_id)
                 self.timer_id = None
-            self.header_label.config(text="SHOOTING DELÜBS - MEISTERSCHAFT ⏸️", fg="#ffd700")
+            #self.header_label.config(text="SHOOTING DELÜBS - MEISTERSCHAFT ⏸️", fg="#ffd700")
+            self.header_label.config(text="⏸️", fg="#ffd700")
         else:
-            self.header_label.config(text="SHOOTING DELÜBS - MEISTERSCHAFT", fg="white")
+            #self.header_label.config(text="SHOOTING DELÜBS - MEISTERSCHAFT", fg="white")
+            self.header_label.config(text="-", fg="white")
             self.restart_timer()
 
         # --- NEU: Den Manager informieren, statt selbst einzugreifen ---
