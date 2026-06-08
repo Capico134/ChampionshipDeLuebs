@@ -904,7 +904,7 @@ class TurnierGUI:
                         current_status = ev.get("m", "")
                         a = ev.get("a", "")
                         
-                        if a == "shoot" and current_status not in ruhephasen:
+                        if current_status not in ruhephasen: #a == "shoot" and 
                             p1_treffer = ev.get("p1_pd", 0) + ev.get("p1_pz", 0)
                             p2_treffer = ev.get("p2_pd", 0) + ev.get("p2_pz", 0)
                             p1_speed   = ev.get("p1_spd", 0.0) + ev.get("p1_spz", 0.0)

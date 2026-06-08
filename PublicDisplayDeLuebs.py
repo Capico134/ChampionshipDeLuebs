@@ -241,14 +241,14 @@ class PublicDisplay(tk.Toplevel):
                 self.match_frame = tk.Frame(self.left_frame, bg="#1a1a1a")
                 self.match_frame.pack(anchor="w", pady=20, fill="x")
 
-                self.lbl_p1_name = tk.Label(self.match_frame, text=match['spieler1'], font=("Arial", 40, "bold"), bg="#1a1a1a", fg="white")
+                self.lbl_p1_name = tk.Label(self.match_frame, text=truncate_text(match['spieler1'],14), font=("Arial", 40, "bold"), bg="#1a1a1a", fg="white")
                 self.lbl_p1_name.grid(row=0, column=0, sticky="w", padx=(0, 20))
                 self.lbl_score_p1 = tk.Label(self.match_frame, text="0", font=("Arial", 48, "bold"), bg="#1a1a1a", fg="#39FF14")
                 self.lbl_score_p1.grid(row=0, column=1, sticky="w")
 
                 tk.Label(self.match_frame, text="vs.", font=("Arial", 24), bg="#1a1a1a", fg="#aaaaaa").grid(row=1, column=0, columnspan=2, pady=10)
 
-                self.lbl_p2_name = tk.Label(self.match_frame, text=match['spieler2'], font=("Arial", 40, "bold"), bg="#1a1a1a", fg="white")
+                self.lbl_p2_name = tk.Label(self.match_frame, text=truncate_text(match['spieler2'],14), font=("Arial", 40, "bold"), bg="#1a1a1a", fg="white")
                 self.lbl_p2_name.grid(row=2, column=0, sticky="w", padx=(0, 20))
                 self.lbl_score_p2 = tk.Label(self.match_frame, text="0", font=("Arial", 48, "bold"), bg="#1a1a1a", fg="#39FF14")
                 self.lbl_score_p2.grid(row=2, column=1, sticky="w")
@@ -256,13 +256,23 @@ class PublicDisplay(tk.Toplevel):
                 self.lbl_match_status = tk.Label(self.left_frame, text="Warten auf Start...", font=("Arial", 20, "bold"), bg="#1a1a1a", fg="gray")
                 self.lbl_match_status.pack(anchor="w", pady=(0, 10))
 
-                # --- NEU: Ein unsichtbarer Container für die Endergebnisse ---
-                self.details_frame = tk.Frame(self.left_frame, bg="#1a1a1a")
-                self.details_frame.pack(anchor="w", pady=(0, 20), fill="x")
+                # --- NEU: Horizontaler Container für "Next Match" und "Ergebnisse" ---
+                self.bottom_row = tk.Frame(self.left_frame, bg="#1a1a1a")
+                self.bottom_row.pack(anchor="nw", fill="x", pady=(0, 20))
 
-                # Wenn es keine Gruppe gibt, jagen wir die match_nr (z.B. 'HF1') durch unseren Übersetzer!
+                # 1. Links: Das "Next Match" Label
+                self.lbl_next = tk.Label(self.bottom_row, font=("Arial", 24), bg="#1a1a1a", fg="#00ff00", justify="left")
+                # Mit pady=(15, 0) schieben wir es oben um 15 Pixel (ca. eine halbe Zeile) nach unten!
+                #self.lbl_next.pack(side="left", anchor="nw", pady=(15, 0))
+                self.lbl_next.pack(side="left", anchor="nw", pady=(0, 0))
+
+                # 2. Rechtsbündig: Der Container für die Ergebnisse (OHNE hardcodierten Abstand)
+                self.details_frame = tk.Frame(self.bottom_row, bg="#1a1a1a")
+                # Durch side="right" und anchor="ne" klebt der Block perfekt an der Mittellinie!
+                self.details_frame.pack(side="right", anchor="ne", pady=(15, 0))
+
+                # Wenn es keine Gruppe gibt, jagen wir die match_nr durch unseren Übersetzer!
                 gruppen_text = match.get('gruppe', self.datei_manager.get_match_name(match.get('match_nr', '')))
-                # NACHHER:
                 if match.get("stechen_notwendig"):
                     prefix = "🚨 STECHEN: "
                 else:
@@ -270,20 +280,25 @@ class PublicDisplay(tk.Toplevel):
                 self.lbl_status.config(text=f"AKTUELL: {prefix}{gruppen_text}")
                 
             else:
-                # Dein neuer Funktionsname!
                 haupt_text, sub_text = self.datei_manager.get_beamer_text(phase)
                 
                 self.lbl_match = tk.Label(self.left_frame, text=haupt_text, font=("Arial", 40, "bold"), bg="#1a1a1a", fg="white")
                 self.lbl_match.pack(anchor="w", pady=20)
                 self.lbl_status.config(text=sub_text)
 
-            self.lbl_next = tk.Label(self.left_frame, font=("Arial", 24), bg="#1a1a1a", fg="#00ff00", justify="left")
-            self.lbl_next.pack(anchor="w", pady=20)
-            
+                # Fallback, wenn kein Match läuft: Normales Layout untereinander
+                self.lbl_next = tk.Label(self.left_frame, font=("Arial", 24), bg="#1a1a1a", fg="#00ff00", justify="left")
+                self.lbl_next.pack(anchor="w", pady=20)
+
+            # --- Das Label mit Daten füttern ---
             if next_m:
-                # Auch hier: Übersetzer statt Magic String!
                 n_phase = next_m.get('gruppe', self.datei_manager.get_match_name(next_m.get('match_nr', '')))
-                self.lbl_next.config(text=f"NEXT: {n_phase}\n{next_m['spieler1']} vs. {next_m['spieler2']}")
+                
+                # --- NEU: Namen intelligent abkürzen (max 12 Zeichen) ---
+                p1_kurz = truncate_text(next_m.get('spieler1', ''), 16)
+                p2_kurz = truncate_text(next_m.get('spieler2', ''), 16)
+                
+                self.lbl_next.config(text=f"NEXT: {n_phase}\n{p1_kurz}\n    vs.\n{p2_kurz}")
             else:
                 self.lbl_next.config(text="ALS NÄCHSTES: ---")
 
@@ -428,7 +443,7 @@ class PublicDisplay(tk.Toplevel):
         plan = self.match_manager.spielplan
         
         titel = f"DETAILLIERTER SPIELPLAN{page_info}"
-        tk.Label(self.table_container, text=titel, font=("Arial", 22, "bold"), bg="#222", fg="#00ff00").pack(pady=(0, 10))
+        tk.Label(self.table_container, text=titel, font=("Arial", 17, "bold"), bg="#222", fg="#00ff00").pack(pady=(0, 0))
         
         # --- HEADER ---
         h_frame = tk.Frame(self.table_container, bg="#444"); h_frame.pack(fill="x")
@@ -446,6 +461,9 @@ class PublicDisplay(tk.Toplevel):
         tk.Label(h_frame, text="Match-Wertung", font=header_font, bg="#444", fg=header_fg, width=14, anchor="center").pack(side="left")
         tk.Label(h_frame, text="Pkt", font=header_font, bg="#444", fg=header_fg, width=4, anchor="center").pack(side="left")
 
+        # --- NEU: Dicke, graue Linie unter dem Header (wie im HTML) ---
+        tk.Frame(self.table_container, bg="#777", height=1.0).pack(fill="x", pady=(0, 0))
+
         akt_match = self.match_manager.get_aktuelles_match()
         akt_nr = akt_match["match_nr"] if akt_match else ""
 
@@ -455,7 +473,18 @@ class PublicDisplay(tk.Toplevel):
         end_idx = start_idx + matches_per_page
         page_matches = plan[start_idx:end_idx]
 
+        letzte_gruppe = None # <-- NEU: Merker für den Gruppenwechsel
+
         for i, m in enumerate(page_matches):
+            aktuelle_gruppe = m.get('gruppe', '-')
+            
+            # --- NEU: Prüfen, ob die Gruppe gewechselt hat ---
+            if letzte_gruppe is not None and aktuelle_gruppe != letzte_gruppe:
+                # Graue Trennlinie einfügen, wenn eine neue Gruppe beginnt
+                tk.Frame(self.table_container, bg="#777", height=1.0).pack(fill="x", pady=(0, 0))
+                
+            letzte_gruppe = aktuelle_gruppe # Merken für den nächsten Durchlauf
+
             is_active = (str(m["match_nr"]) == str(akt_nr))
             bg_color = "#444" if is_active else ("#333" if i % 2 == 0 else "#2a2a2a")
             fg_color = "#00ff00" if is_active else "white"

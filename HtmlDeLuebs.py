@@ -175,7 +175,7 @@ class HtmlExporter:
                             <th>Spiele</th>
                             <th>Turnierpunkte</th>
                             <th>Diff</th>
-                            <th>Gesamt</th>
+                            <th>Gesamtleistung</th>
                         </tr>
                 """
                 
@@ -209,7 +209,7 @@ class HtmlExporter:
             html += """
             <div class="table-container">
                 <table>
-                    <tr>
+                    <tr style="border-bottom: 2px solid #00ff00;">
                         <th>Nr.</th>
                         <th>Grp</th>
                         <th style="text-align: left;">Paarung</th>
@@ -218,13 +218,27 @@ class HtmlExporter:
                         <th>Match-Wertung</th>
                     </tr>
             """
+            
+            letzte_gruppe = None # <-- NEU: Variable, um sich die Gruppe des vorherigen Matches zu merken
+            
             for m in spielplan:
+                aktuelle_gruppe = m.get('gruppe', '-')
+                
+                # --- NEU: Prüfen, ob die Gruppe gewechselt hat ---
+                if letzte_gruppe is not None and aktuelle_gruppe != letzte_gruppe:
+                    # Wenn ja: Eine dicke graue Linie als Trenner nach oben ziehen
+                    tr_style = ' style="border-top: 2px solid #777;"'
+                else:
+                    tr_style = ''
+                    
+                letzte_gruppe = aktuelle_gruppe # Aktuelle Gruppe für den nächsten Durchlauf speichern
+                
                 if m.get("gespielt"):
                     b1, b2 = m.get('base1', 0), m.get('base2', 0)
                     treffer = f"{b1} : {b2}"
                     gesamt = f"{m.get('total1', 0):.2f} : {m.get('total2', 0):.2f}"
                     
-                    # --- NEU: Punkte für die neue Spalte berechnen ---
+                    # --- Punkte für die neue Spalte berechnen ---
                     if b1 > b2: t_punkte = "3 : 0"
                     elif b1 < b2: t_punkte = "0 : 3"
                     else: t_punkte = "1 : 1"
@@ -233,10 +247,11 @@ class HtmlExporter:
                     gesamt = "- : -"
                     t_punkte = "- : -"
 
+                # --- NEU: Den tr_style in das <tr> Tag einfügen ---
                 html += f"""
-                    <tr>
+                    <tr{tr_style}>
                         <td style="color: #ffffff;">{m.get('match_nr', '-')}</td>
-                        <td style="color: #ffffff;">{m.get('gruppe', '-')}</td>
+                        <td style="color: #ffffff;">{aktuelle_gruppe}</td>
                         <td style="text-align: left;"><strong>{m.get('spieler1', '')}</strong> vs. <strong>{m.get('spieler2', '')}</strong></td>
                         <td style="color: #00ff00; font-weight: bold;">{t_punkte}</td>
                         <td style="color: #ffffff; font-weight: bold;">{treffer}</td>
@@ -247,7 +262,7 @@ class HtmlExporter:
                 </table>
             </div>
             """
-            html += "</div>" # <-- NEU: Rahmen wieder schließen!
+            html += "</div>" # <-- Rahmen wieder schließen!
 
 
         # 7. DIE K.O.-PHASE
@@ -320,7 +335,7 @@ class HtmlExporter:
                             <th>Setzplatz</th>
                             <th style="text-align: left;">Schütze</th>
                             <th>Grp.</th>
-                            <th>Punkte</th>
+                            <th>Turnierpunkte</th>
                             <th>Diff</th>
                             <th>Gesamtleistung</th>
                         </tr>
