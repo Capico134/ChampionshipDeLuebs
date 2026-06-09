@@ -217,6 +217,7 @@ class PublicDisplay(tk.Toplevel):
 
         self.table_container = tk.Frame(self.right_frame, bg="#222")
         self.table_container.pack(fill="both", expand=True)
+
     def refresh_display(self):
         match = self.match_manager.get_aktuelles_match()
         next_m = self.match_manager.get_naechstes_match()
@@ -264,12 +265,13 @@ class PublicDisplay(tk.Toplevel):
                 self.lbl_next = tk.Label(self.bottom_row, font=("Arial", 24), bg="#1a1a1a", fg="#00ff00", justify="left")
                 # Mit pady=(15, 0) schieben wir es oben um 15 Pixel (ca. eine halbe Zeile) nach unten!
                 #self.lbl_next.pack(side="left", anchor="nw", pady=(15, 0))
-                self.lbl_next.pack(side="left", anchor="nw", pady=(0, 0))
+                self.lbl_next.pack(side="left", anchor="nw", pady=(7, 0))
 
                 # 2. Rechtsbündig: Der Container für die Ergebnisse (OHNE hardcodierten Abstand)
                 self.details_frame = tk.Frame(self.bottom_row, bg="#1a1a1a")
                 # Durch side="right" und anchor="ne" klebt der Block perfekt an der Mittellinie!
-                self.details_frame.pack(side="right", anchor="ne", pady=(15, 0))
+                #self.details_frame.pack(side="right", anchor="ne", pady=(15, 0))
+                self.details_frame.pack(side="right", anchor="ne", pady=(0, 0))
 
                 # Wenn es keine Gruppe gibt, jagen wir die match_nr durch unseren Übersetzer!
                 gruppen_text = match.get('gruppe', self.datei_manager.get_match_name(match.get('match_nr', '')))
@@ -704,18 +706,25 @@ class PublicDisplay(tk.Toplevel):
                     
                     diff = abs(p1_total - p2_total)
                     
+                    #Überschrift
+                    tk.Label(self.details_frame, text=f"Ergebnisse:", font=("Arial", 18, "bold"), bg="#1a1a1a", fg="white").pack(anchor="w", pady=2)
+                    
                     # Turnierpunkte berechnen (nur für Gruppenphase interessant)
                     if not is_ko:
+                        # --- GRUPPENPHASE: Volles Programm ---
                         if p1_base > p2_base: tp1, tp2 = 3, 0
                         elif p1_base < p2_base: tp1, tp2 = 0, 3
                         else: tp1, tp2 = 1, 1
                         
                         tk.Label(self.details_frame, text=f"Turnierpunkte: {tp1} : {tp2}", font=("Arial", 18, "bold"), bg="#1a1a1a", fg="#00ff00").pack(anchor="w", pady=2)
+                        tk.Label(self.details_frame, text=f"Match-Wertung: {p1_total:.2f} : {p2_total:.2f}", font=("Arial", 16), bg="#1a1a1a", fg="#ffd700").pack(anchor="w", pady=2)
+                        tk.Label(self.details_frame, text=f"Differenz: {diff:.2f}", font=("Arial", 16), bg="#1a1a1a", fg="#aaaaaa").pack(anchor="w", pady=2)
                     
-                    # Match-Wertung und Differenz anzeigen
-                    tk.Label(self.details_frame, text=f"Match-Wertung: {p1_total:.2f} : {p2_total:.2f}", font=("Arial", 16), bg="#1a1a1a", fg="#ffd700").pack(anchor="w", pady=2)
-                    tk.Label(self.details_frame, text=f"Differenz: {diff:.2f}", font=("Arial", 16), bg="#1a1a1a", fg="#aaaaaa").pack(anchor="w", pady=2)
-                    
+                    else:
+                        # --- K.O.-PHASE: Auf das Wesentliche reduziert ---
+                        tk.Label(self.details_frame, text=f"Treffer: {p1_base} : {p2_base}", font=("Arial", 18, "bold"), bg="#1a1a1a", fg="#00ff00").pack(anchor="w", pady=2)
+                        tk.Label(self.details_frame, text=f"Match-Wertung: {p1_total:.2f} : {p2_total:.2f}", font=("Arial", 16), bg="#1a1a1a", fg="#ffd700").pack(anchor="w", pady=2)
+                        
             elif status == "WARTEN":
                 self.lbl_match_status.config(text="Warten auf Start...", fg="gray")
                 self._clear_details() # Endergebnisse wieder ausblenden
