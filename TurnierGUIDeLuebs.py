@@ -179,17 +179,23 @@ class TurnierGUI:
         self.build_ko_tab()
 
     def build_setup_tab(self):
-        # --- NEU: ELA-LÖSUNG (Laden direkt im UI statt als Startup-Popup) ---
-        resume_frame = ttk.LabelFrame(self.setup_frame, text=" 💾 Gespeicherte Turniere ", padding=10)
-        resume_frame.pack(fill=tk.X, pady=(0, 15))
+        # --- NEU: ELA-LÖSUNG (Alle Hauptaktionen immer oben griffbereit) ---
+        action_frame = ttk.LabelFrame(self.setup_frame, text=" 🚀 Turnier-Steuerung ", padding=10)
+        action_frame.pack(fill=tk.X, pady=(0, 15))
 
+        # 1. Neues Turnier ganz links (als primäre Aktion)
+        ttk.Button(action_frame, text="⚔️ NEUES TURNIER STARTEN", 
+                   command=self.turnier_starten).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+
+        # 2. Letzten Stand laden
         neueste_datei = self.datei_manager.finde_neuesten_pfad()
         if neueste_datei:
             dateiname = os.path.basename(neueste_datei)
-            ttk.Button(resume_frame, text=f"▶ LETZTEN STAND FORTSETZEN ({dateiname})", 
+            ttk.Button(action_frame, text=f"▶ LETZTEN STAND FORTSETZEN ({dateiname})", 
                        command=lambda: self.load_specific_state(neueste_datei)).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
 
-        ttk.Button(resume_frame, text="📂 ANDEREN STAND LADEN...", 
+        # 3. Anderen Stand laden
+        ttk.Button(action_frame, text="📂 ANDEREN STAND LADEN...", 
                    command=self.load_manual_state).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
         # ---------------------------------------------------------------------
 
@@ -211,8 +217,11 @@ class TurnierGUI:
 
         # 2. Das Label für das Textfeld anpassen
         ttk.Label(self.setup_frame, text="Neues Turnier: Teilnehmer (Ein Name pro Zeile):", font=("Arial", 12)).pack(anchor=tk.W)
+        
+        # Durch fill=tk.BOTH und expand=True nimmt sich das Textfeld den restlichen Platz.
+        # Es scrollt intern, wenn es viele Namen sind, aber schiebt die UI nicht mehr kaputt!
         self.name_input = tk.Text(self.setup_frame, height=15, width=40)
-        self.name_input.pack(fill=tk.X, pady=10)
+        self.name_input.pack(fill=tk.BOTH, expand=True, pady=10)
         
         if os.path.exists("teilnehmer.txt"):
             with open("teilnehmer.txt", "r", encoding="utf-8") as f:
@@ -220,8 +229,7 @@ class TurnierGUI:
         else:
             self.name_input.insert(tk.END, "Petra\nSarah\nTom\nBernd\nBen\nLisa\nMax\nHannes\nAnna\nJulia\nMichaela\nChris")
             
-        ttk.Button(self.setup_frame, text="NEUES TURNIER STARTEN", command=self.turnier_starten).pack(fill=tk.X, pady=10)
-
+        # Der alte Start-Button ganz unten wurde entfernt!
     # --- Die zwei neuen Helfer-Funktionen für die Buttons ---
     def load_specific_state(self, pfad):
         stand = self.datei_manager.lade_stand_aus_datei(pfad)
