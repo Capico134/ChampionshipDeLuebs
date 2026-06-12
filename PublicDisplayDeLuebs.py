@@ -239,40 +239,41 @@ class PublicDisplay(tk.Toplevel):
             self.lbl_status.pack(anchor="w")
 
             if match:
-                self.match_frame = tk.Frame(self.left_frame, bg="#1a1a1a")
-                self.match_frame.pack(anchor="w", pady=20, fill="x")
+                # --- NEU: Horizontaler Container für Match (Links) und Details (Rechts) ---
+                self.match_container = tk.Frame(self.left_frame, bg="#1a1a1a")
+                self.match_container.pack(anchor="nw", fill="x", pady=20)
 
-                self.lbl_p1_name = tk.Label(self.match_frame, text=truncate_text(match['spieler1'],14), font=("Arial", 40, "bold"), bg="#1a1a1a", fg="white")
+                # 1. Links: Das eigentliche Match
+                self.match_frame = tk.Frame(self.match_container, bg="#1a1a1a")
+                self.match_frame.pack(side="left", anchor="nw")
+
+                # Namen auf 14 kürzen für maximalen Platzgewinn
+                p1_name_trunc = truncate_text(match['spieler1'], 14)
+                p2_name_trunc = truncate_text(match['spieler2'], 14)
+
+                self.lbl_p1_name = tk.Label(self.match_frame, text=p1_name_trunc, font=("Arial", 40, "bold"), bg="#1a1a1a", fg="white")
                 self.lbl_p1_name.grid(row=0, column=0, sticky="w", padx=(0, 20))
                 self.lbl_score_p1 = tk.Label(self.match_frame, text="0", font=("Arial", 48, "bold"), bg="#1a1a1a", fg="#39FF14")
                 self.lbl_score_p1.grid(row=0, column=1, sticky="w")
 
                 tk.Label(self.match_frame, text="vs.", font=("Arial", 24), bg="#1a1a1a", fg="#aaaaaa").grid(row=1, column=0, columnspan=2, pady=10)
 
-                self.lbl_p2_name = tk.Label(self.match_frame, text=truncate_text(match['spieler2'],14), font=("Arial", 40, "bold"), bg="#1a1a1a", fg="white")
+                self.lbl_p2_name = tk.Label(self.match_frame, text=p2_name_trunc, font=("Arial", 40, "bold"), bg="#1a1a1a", fg="white")
                 self.lbl_p2_name.grid(row=2, column=0, sticky="w", padx=(0, 20))
                 self.lbl_score_p2 = tk.Label(self.match_frame, text="0", font=("Arial", 48, "bold"), bg="#1a1a1a", fg="#39FF14")
                 self.lbl_score_p2.grid(row=2, column=1, sticky="w")
 
+                # 2. Rechtsbündig: Der Details-Frame rutscht hoch!
+                self.details_frame = tk.Frame(self.match_container, bg="#1a1a1a")
+                # anchor="e" (East) zentriert die Details optisch sehr schön rechts neben den Zahlen
+                self.details_frame.pack(side="right", anchor="e", padx=(10, 0))
+
+                # Status und Next Match folgen danach ganz normal untereinander
                 self.lbl_match_status = tk.Label(self.left_frame, text="Warten auf Start...", font=("Arial", 20, "bold"), bg="#1a1a1a", fg="gray")
                 self.lbl_match_status.pack(anchor="w", pady=(0, 10))
 
-                # --- NEU: Horizontaler Container für "Next Match" und "Ergebnisse" ---
-                self.bottom_row = tk.Frame(self.left_frame, bg="#1a1a1a")
-                self.bottom_row.pack(anchor="nw", fill="x", pady=(0, 20))
-
-                # 1. Links: Das "Next Match" Label
-                self.lbl_next = tk.Label(self.bottom_row, font=("Arial", 24), bg="#1a1a1a", fg="#00ff00", justify="left")
-                # Mit pady=(15, 0) schieben wir es oben um 15 Pixel (ca. eine halbe Zeile) nach unten!
-                #self.lbl_next.pack(side="left", anchor="nw", pady=(15, 0))
-                self.lbl_next.pack(side="left", anchor="nw", pady=(7, 0))
-
-                # 2. Rechtsbündig: Der Container für die Ergebnisse (OHNE hardcodierten Abstand)
-                self.details_frame = tk.Frame(self.bottom_row, bg="#1a1a1a")
-                # Durch side="right" und anchor="ne" klebt der Block perfekt an der Mittellinie!
-                #self.details_frame.pack(side="right", anchor="ne", pady=(15, 0))
-                self.details_frame.pack(side="right", anchor="ne", pady=(0, 0))
-
+                self.lbl_next = tk.Label(self.left_frame, font=("Arial", 24), bg="#1a1a1a", fg="#00ff00", justify="left")
+                self.lbl_next.pack(anchor="w", pady=(20, 0))
                 # Wenn es keine Gruppe gibt, jagen wir die match_nr durch unseren Übersetzer!
                 gruppen_text = match.get('gruppe', self.datei_manager.get_match_name(match.get('match_nr', '')))
                 if match.get("stechen_notwendig"):
@@ -300,7 +301,7 @@ class PublicDisplay(tk.Toplevel):
                 p1_kurz = truncate_text(next_m.get('spieler1', ''), 16)
                 p2_kurz = truncate_text(next_m.get('spieler2', ''), 16)
                 
-                self.lbl_next.config(text=f"NEXT: {n_phase}\n{p1_kurz}\n    vs.\n{p2_kurz}")
+                self.lbl_next.config(text=f"NEXT: {n_phase}\n{p1_kurz} vs. {p2_kurz}")
             else:
                 self.lbl_next.config(text="ALS NÄCHSTES: ---")
 
@@ -711,20 +712,20 @@ class PublicDisplay(tk.Toplevel):
                     
                     # Turnierpunkte berechnen (nur für Gruppenphase interessant)
                     if not is_ko:
-                        # --- GRUPPENPHASE: Volles Programm ---
+                        # --- GRUPPENPHASE ---
                         if p1_base > p2_base: tp1, tp2 = 3, 0
                         elif p1_base < p2_base: tp1, tp2 = 0, 3
                         else: tp1, tp2 = 1, 1
                         
-                        tk.Label(self.details_frame, text=f"Turnierpunkte: {tp1} : {tp2}", font=("Arial", 18, "bold"), bg="#1a1a1a", fg="#00ff00").pack(anchor="w", pady=2)
-                        tk.Label(self.details_frame, text=f"Match-Wertung: {p1_total:.2f} : {p2_total:.2f}", font=("Arial", 16), bg="#1a1a1a", fg="#ffd700").pack(anchor="w", pady=2)
-                        tk.Label(self.details_frame, text=f"Differenz: {diff:.2f}", font=("Arial", 16), bg="#1a1a1a", fg="#aaaaaa").pack(anchor="w", pady=2)
+                        tk.Label(self.details_frame, text=f"Turnierpunkte: {tp1} : {tp2}", font=("Arial", 14, "bold"), bg="#1a1a1a", fg="#00ff00").pack(anchor="w", pady=2)
+                        tk.Label(self.details_frame, text=f"Match-Wertung: {p1_total:.2f} : {p2_total:.2f}", font=("Arial", 12), bg="#1a1a1a", fg="#ffd700").pack(anchor="w", pady=2)
+                        tk.Label(self.details_frame, text=f"Differenz: {diff:.2f}", font=("Arial", 12), bg="#1a1a1a", fg="#aaaaaa").pack(anchor="w", pady=2)
                     
                     else:
-                        # --- K.O.-PHASE: Auf das Wesentliche reduziert ---
-                        tk.Label(self.details_frame, text=f"Treffer: {p1_base} : {p2_base}", font=("Arial", 18, "bold"), bg="#1a1a1a", fg="#00ff00").pack(anchor="w", pady=2)
-                        tk.Label(self.details_frame, text=f"Match-Wertung: {p1_total:.2f} : {p2_total:.2f}", font=("Arial", 16), bg="#1a1a1a", fg="#ffd700").pack(anchor="w", pady=2)
-                        
+                        # --- K.O.-PHASE ---
+                        tk.Label(self.details_frame, text=f"Treffer: {p1_base} : {p2_base}", font=("Arial", 14, "bold"), bg="#1a1a1a", fg="#00ff00").pack(anchor="w", pady=2)
+                        tk.Label(self.details_frame, text=f"Match-Wertung: {p1_total:.2f} : {p2_total:.2f}", font=("Arial", 12), bg="#1a1a1a", fg="#ffd700").pack(anchor="w", pady=2)
+
             elif status == "WARTEN":
                 self.lbl_match_status.config(text="Warten auf Start...", fg="gray")
                 self._clear_details() # Endergebnisse wieder ausblenden
