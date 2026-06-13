@@ -521,12 +521,14 @@ class PublicDisplay(tk.Toplevel):
             tk.Label(f, text=p_text, font=data_font, bg=bg_color, fg="#00ff00", width=4, anchor="center").pack(side="left")
             
     def update_tables(self, page=0, page_info=""):
+        
         # --- FEHLENDE VARIABLEN HINZUGEFÜGT ---
         akt_match = self.match_manager.get_aktuelles_match()
         akt_gruppe = akt_match['gruppe'] if akt_match and 'gruppe' in akt_match else ""
         # --------------------------------------
 
         gruppen_keys = sorted(list(self.match_manager.gruppen.keys()))
+        #print('test: ', gruppen_keys)
         
         # --- ELA: Slicing der Gruppen für die aktuelle Seite ---
         groups_per_page = self.groups_per_page_var.get()

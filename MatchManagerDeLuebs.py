@@ -1,4 +1,5 @@
 from enum import Enum, auto
+import datetime
 from TurnierLogikDeLuebs import berechne_ko_phase
 
 class TurnierPhase(Enum):
@@ -9,8 +10,9 @@ class TurnierPhase(Enum):
     BEENDET = auto()
 
 class MatchManager:
-    def __init__(self):
-        self.teilnehmer = []
+    def __init__(self, app_version="unknown"):
+        self.app_version = app_version  # <--- HIER ist es sauber deklariert!
+        #self.teilnehmer = []
         self.gruppen = {}      
         self.spielplan = []    
         self.aktuelles_match_index = 0
@@ -44,8 +46,8 @@ class MatchManager:
             self.aktuelles_match_index = idx
         self._trigger_match_changed()
    
-    def lade_teilnehmer(self, namensliste):
-        self.teilnehmer = namensliste
+#    def lade_teilnehmer(self, namensliste):
+#        self.teilnehmer = namensliste
 
     def setze_turnier_daten(self, gruppen_dict, spielplan_liste):
         self.gruppen = gruppen_dict
@@ -241,9 +243,9 @@ class MatchManager:
         if new_name in self.ergebnisse: 
             return False 
             
-        # 3. Kaskadierendes Update
-        if old_name in self.teilnehmer: 
-            self.teilnehmer[self.teilnehmer.index(old_name)] = new_name
+        ## 3. Kaskadierendes Update
+        #if old_name in self.teilnehmer: 
+        #    self.teilnehmer[self.teilnehmer.index(old_name)] = new_name
             
         for g, players in self.gruppen.items():
             if old_name in players: 
@@ -354,9 +356,19 @@ class MatchManager:
 
     def get_state(self):
         return {
-            "teilnehmer": self.teilnehmer, "gruppen": self.gruppen,
-            "spielplan": self.spielplan, "aktuelles_match_index": self.aktuelles_match_index,
-            "ergebnisse": self.ergebnisse, "gruppen_zeiten": self.gruppen_zeiten,
+            # --- ELA-Metadaten Block (Sauber und streng typisiert) ---
+            "_meta": {
+                "app_version": self.app_version, 
+                "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            },
+            
+            # --- FIX: Gruppen sind wieder da! Teilnehmer bleiben gelöscht. ---
+            "gruppen": self.gruppen,
+            
+            "spielplan": self.spielplan, 
+            "aktuelles_match_index": self.aktuelles_match_index,
+            "ergebnisse": self.ergebnisse, 
+            "gruppen_zeiten": self.gruppen_zeiten,
             
             # WICHTIG: Der Key bleibt "turnier_modus", die Variable ist self.phase
             "turnier_modus": self.phase.name, 
@@ -366,7 +378,7 @@ class MatchManager:
         }
 
     def load_state(self, state_dict):
-        self.teilnehmer = state_dict.get("teilnehmer", [])
+        #self.teilnehmer = state_dict.get("teilnehmer", [])
         self.gruppen = state_dict.get("gruppen", {})
         self.spielplan = state_dict.get("spielplan", [])
         self.aktuelles_match_index = state_dict.get("aktuelles_match_index", 0)

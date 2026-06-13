@@ -30,7 +30,7 @@ def main():
     soll_topmost = "-topmost" in sys.argv
     
     datei_manager = DateiManager()
-    match_manager = MatchManager()
+    match_manager = MatchManager(app_version=aktuelle_version)
     #turnier_logik = TurnierLogik()
     
     # 1. Das Fenster wird nur gebaut (__init__)
