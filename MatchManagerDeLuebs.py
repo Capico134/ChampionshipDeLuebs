@@ -132,7 +132,7 @@ class MatchManager:
             return True
         return False
 
-    def trage_ergebnis_ein(self, base1, base2, total1, total2, pi_match_id="-"):
+    def trage_ergebnis_ein(self, base1, base2, total1, total2, pi_match_id="-", programm_name=""):
         match = self.get_aktuelles_match()
         if not match: return
         
@@ -143,6 +143,7 @@ class MatchManager:
             "total1": total1, 
             "total2": total2, 
             "pi_match_id": pi_match_id, 
+            "programm_name": programm_name, # <--- NEU: Ab in den Spielplan damit!
             "gespielt": True
         })
             

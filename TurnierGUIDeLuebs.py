@@ -287,10 +287,12 @@ class TurnierGUI:
         ttk.Button(action_frame, text="🔄 NEU STARTEN", command=lambda: self.reset_match_gui(False)).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=2)
 
         # 3. Treeview (Füllt jetzt automatisch den kompletten restlichen Platz in der Mitte auf!)
-        columns = ("nr", "status", "gruppe", "paarung", "punkte", "diff", "pi_id")
+        # --- NEU: "programm" als Spalte hinzugefügt ---
+        columns = ("nr", "status", "gruppe", "paarung", "punkte", "diff", "pi_id", "programm")
         self.tree_matches = ttk.Treeview(self.control_frame, columns=columns, show="headings", height=6)
         
-        for col, txt, w in zip(columns, ["Nr.", "Status", "Gruppe", "Paarung", "Punkte", "Gesamt (Diff)", "Pi-ID"], [40, 80, 60, 200, 80, 140, 60]):
+        # --- NEU: "Programm" in den Headern und Breite "150" hinzugefügt ---
+        for col, txt, w in zip(columns, ["Nr.", "Status", "Gruppe", "Paarung", "Punkte", "Gesamt (Diff)", "Pi-ID", "Programm"], [40, 80, 60, 200, 80, 140, 60, 150]):
             self.tree_matches.heading(col, text=txt)
             self.tree_matches.column(col, width=w, anchor="center" if col != "paarung" else "w")
             
@@ -329,12 +331,15 @@ class TurnierGUI:
         ttk.Button(ko_actions, text="🔄 NEU STARTEN", command=lambda: self.reset_match_gui(True)).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=2)
 
         # 3. Treeview (Füllt die Mitte)
-        # 'phase' zu 'typ' oder 'runde' ändern, damit es sauber ist
-        cols = ("nr", "status", "typ", "paarung", "punkte", "diff", "pi_id", "winner")
+        # --- NEU: "programm" als Spalte vor den "winner" gepackt ---
+        cols = ("nr", "status", "typ", "paarung", "punkte", "diff", "pi_id", "programm", "winner")
         self.tree_ko = ttk.Treeview(self.ko_frame, columns=cols, show="headings", height=6)
-        # Und in der zip-Schleife darunter das Wort "Phase" durch "Runde" oder "Typ" ersetzen:
-        for c, t, w in zip(cols, ["Nr.", "Status", "Typ", "Paarung", "Punkte", "Gesamt (Diff)", "Pi-ID", "Sieger"], [40, 80, 100, 200, 80, 140, 60, 120]):
-            self.tree_ko.heading(c, text=t); self.tree_ko.column(c, width=w, anchor="center" if c != "paarung" else "w")
+        
+        # --- NEU: "Programm" in den Headern und Breite "150" hinzugefügt ---
+        for c, t, w in zip(cols, ["Nr.", "Status", "Typ", "Paarung", "Punkte", "Gesamt (Diff)", "Pi-ID", "Programm", "Sieger"], [40, 80, 100, 200, 80, 140, 60, 150, 120]):
+            self.tree_ko.heading(c, text=t)
+            self.tree_ko.column(c, width=w, anchor="center" if c != "paarung" else "w")
+            
         self.tree_ko.pack(side=tk.TOP, fill=tk.BOTH, expand=True, pady=(10, 10))
 
     def load_ticker_template(self, event):
@@ -518,6 +523,8 @@ class TurnierGUI:
         b1, b2 = d.get("punkte_durchgang", 0), d.get("punkte_durchgang_pl2", 0)
         t1, t2 = d.get("gesamtpunkte", 0), d.get("gesamtpunkte_pl2", 0)
         pi_id = d.get("match_id", "-")
+        prog_name = d.get("programm_name", "Unbekanntes Programm")
+        print(prog_name)
 
         # 1. Den Manager die richtige Funktion ausführen lassen
         if szenario == "STECHEN_AKTIV":
@@ -526,7 +533,7 @@ class TurnierGUI:
             self.match_manager.aktiviere_stechen(b1, b2, t1, t2, pi_id)
             self.match_zu_pi() # Den Pi nochmal antriggern 
         else:
-            self.match_manager.trage_ergebnis_ein(b1, b2, t1, t2, pi_id)
+            self.match_manager.trage_ergebnis_ein(b1, b2, t1, t2, pi_id, programm_name=prog_name)
 
         # 2. Zentrale Abschlussarbeiten erledigen
         self._abschluss_routine()
@@ -690,7 +697,16 @@ class TurnierGUI:
             if m.get("gespielt"):
                 p_txt, d_txt, id_txt = f"{m.get('base1', 0)} : {m.get('base2', 0)}", f"{m.get('total1', 0):.3f} : {m.get('total2', 0):.3f}", str(m.get("pi_match_id", "-"))
             else: p_txt, d_txt, id_txt = "- : -", "- : -", "-"
-            self.tree_matches.insert("", tk.END, iid=str(i), values=(m['match_nr'], status, m['gruppe'], f"{m['spieler1']} vs {m['spieler2']}", p_txt, d_txt, id_txt))
+            
+            # --- NEU: Den programm_name hinten an die values anhängen! ---
+            self.tree_matches.insert("", tk.END, iid=str(i), values=(
+                m['match_nr'], 
+                status, 
+                m['gruppe'], 
+                f"{m['spieler1']} vs {m['spieler2']}", 
+                p_txt, d_txt, id_txt, 
+                m.get("programm_name", "-") # <--- HIER
+            ))
     
     def update_ko_ui(self):
         # 1. Nur noch die reine State-Machine abfragen! Kein Rechnen mehr!
@@ -746,12 +762,15 @@ class TurnierGUI:
             else:
                 p_txt, d_txt, id_txt = "- : -", "- : -", "-"
             
+            # --- NEU: Den programm_name vor den winner klemmen! ---
             self.tree_ko.insert("", tk.END, iid=str(i), values=(
                 m['match_nr'], 
                 status, 
-                self.datei_manager.get_match_name(m['match_nr']), # <--- HIER ÜBERSETZEN WIR LIVE!
+                self.datei_manager.get_match_name(m['match_nr']),
                 f"{m['spieler1']} vs {m['spieler2']}", 
-                p_txt, d_txt, id_txt, m.get("winner", "-")
+                p_txt, d_txt, id_txt, 
+                m.get("programm_name", "-"), # <--- HIER
+                m.get("winner", "-")
             ))
 
     def update_overview_ui(self):
@@ -869,7 +888,8 @@ class TurnierGUI:
 #AB HIER LIVE POLLING
         
     def start_live_polling(self):
-        # WICHTIG: Statt der Uhrzeit (last_mtime) merken wir uns jetzt den Text!
+        # Wir setzen BEIDES zurück, um das Caching auszutricksen
+        self.last_mtime = 0
         self.last_raw_data = "" 
         self.live_match_finished = False 
         self.check_live_data()
@@ -883,67 +903,80 @@ class TurnierGUI:
             if self.beamer_window and tk.Toplevel.winfo_exists(self.beamer_window):
                 self.beamer_window.update_live_score(0, 0, "WARTEN")
             # Cache leeren, wenn das Match vorbei ist
+            self.last_mtime = 0
             self.last_raw_data = ""  
         else:
-            # 2. DATEI IST DA -> DER SMB CACHE-BUSTER!
             try:
-                # Wir fragen Windows nicht nach der Uhrzeit, sondern lesen die Datei knallhart aus!
-                with open(live_file, "r", encoding="utf-8") as f:
-                    raw_data = f.read()
+                # 2. DER WAHRE CACHE-BUSTER!
+                # Das getmtime zwingt Windows, über das WLAN beim Pi den echten Status abzufragen!
+                current_mtime = os.path.getmtime(live_file)
+                
+                # Wir lesen nur, wenn das Netzwerk eine Änderung meldet ODER wir noch nie gelesen haben
+                if current_mtime > self.last_mtime or self.last_raw_data == "":
+                    
+                    with open(live_file, "r", encoding="utf-8") as f:
+                        raw_data = f.read()
 
-                # <--- HIER IST DIE NEUE MAGIE --->
-                # Hat sich inhaltlich auch nur EIN Zeichen verändert?
-                if raw_data != self.last_raw_data and raw_data.strip():
-                    self.last_raw_data = raw_data
-                    
-                    # Erst wenn der Text neu ist, wandeln wir ihn in ein JSON-Objekt um
-                    data = json.loads(raw_data) 
-                    
-                    timeline = data.get("timeline", []) if isinstance(data, dict) else data
-                    
-                    p1_treffer, p2_treffer = 0, 0
-                    p1_speed, p2_speed = 0.0, 0.0
-                    current_status = ""
-                    
-                    ruhephasen = ["LADEN", "ACHTUNG", "SICHERHEIT", "RESET", "VORBEREITEN"]
-                    
-                    # Wir spulen das Match chronologisch ab
-                    for ev in timeline:
-                        current_status = ev.get("m", "")
-                        a = ev.get("a", "")
+                    # Hat sich inhaltlich was getan?
+                    if raw_data != self.last_raw_data and raw_data.strip():
                         
-                        if current_status not in ruhephasen: #a == "shoot" and 
-                            p1_treffer = ev.get("p1_pd", 0) + ev.get("p1_pz", 0)
-                            p2_treffer = ev.get("p2_pd", 0) + ev.get("p2_pz", 0)
-                            p1_speed   = ev.get("p1_spd", 0.0) + ev.get("p1_spz", 0.0)
-                            p2_speed   = ev.get("p2_spd", 0.0) + ev.get("p2_spz", 0.0)
-                        elif current_status in ruhephasen:
-                            p1_treffer = ev.get("p1_pd", 0)
-                            p2_treffer = ev.get("p2_pd", 0)
-                            p1_speed   = ev.get("p1_spd", 0.0)
-                            p2_speed   = ev.get("p2_spd", 0.0)
-                        else:
-                            p1_treffer = ev.get("p1_pd", 0)
-                            p2_treffer = ev.get("p2_pd", 0)
-                            p1_speed   = ev.get("p1_spd", 0.0)
-                            p2_speed   = ev.get("p2_spd", 0.0)
-
-                    is_ko = getattr(self.match_manager, "phase", None) in [TurnierPhase.KO_PHASE, TurnierPhase.BEENDET]
-                    if is_ko and not self.match_manager.get_aktuelles_match().get("stechen_notwendig"):
-                        p1_score = f"{(p1_treffer + p1_speed):.2f}"
-                        p2_score = f"{(p2_treffer + p2_speed):.2f}"
-                    else:
-                        p1_score = str(p1_treffer)
-                        p2_score = str(p2_treffer)
+                        # 3. DER SCHUTZSCHILD GEGEN HALBE DATEIEN (WLAN-Lags)
+                        try:
+                            # Wir versuchen ERST zu parsen...
+                            data = json.loads(raw_data)
                             
-                    # Finalen Stand an den Beamer senden (mit Zusatzdaten für das Endergebnis)
-                    if self.beamer_window and tk.Toplevel.winfo_exists(self.beamer_window):
-                        self.beamer_window.update_live_score(
-                            p1_score, p2_score, current_status,
-                            p1_base=p1_treffer, p2_base=p2_treffer,
-                            p1_total=(p1_treffer + p1_speed), p2_total=(p2_treffer + p2_speed)
-                        )
-                        
+                            # ...und NUR wenn es nicht abgestürzt ist, merken wir uns den Text und die Zeit!
+                            # So vergiften wir uns niemals den Cache mit halben Dateien.
+                            self.last_raw_data = raw_data
+                            self.last_mtime = current_mtime
+                            
+                            # --- AB HIER DEINE SAUBERE PARSING-LOGIK ---
+                            timeline = data.get("timeline", []) if isinstance(data, dict) else data
+                            
+                            p1_treffer, p2_treffer = 0, 0
+                            p1_speed, p2_speed = 0.0, 0.0
+                            current_status = ""
+                            
+                            ruhephasen = ["LADEN", "ACHTUNG", "SICHERHEIT", "RESET", "VORBEREITEN"]
+                            
+                            # Wir spulen das Match chronologisch ab
+                            for ev in timeline:
+                                current_status = ev.get("m", "")
+                                
+                                if current_status not in ruhephasen: 
+                                    p1_treffer = ev.get("p1_pd", 0) + ev.get("p1_pz", 0)
+                                    p2_treffer = ev.get("p2_pd", 0) + ev.get("p2_pz", 0)
+                                    p1_speed   = ev.get("p1_spd", 0.0) + ev.get("p1_spz", 0.0)
+                                    p2_speed   = ev.get("p2_spd", 0.0) + ev.get("p2_spz", 0.0)
+                                else:
+                                    # Fallback für alle Ruhephasen (Laden, Achtung etc.)
+                                    p1_treffer = ev.get("p1_pd", 0)
+                                    p2_treffer = ev.get("p2_pd", 0)
+                                    p1_speed   = ev.get("p1_spd", 0.0)
+                                    p2_speed   = ev.get("p2_spd", 0.0)
+
+                            is_ko = getattr(self.match_manager, "phase", None) in [TurnierPhase.KO_PHASE, TurnierPhase.BEENDET]
+                            if is_ko and not self.match_manager.get_aktuelles_match().get("stechen_notwendig"):
+                                p1_score = f"{(p1_treffer + p1_speed):.2f}"
+                                p2_score = f"{(p2_treffer + p2_speed):.2f}"
+                            else:
+                                p1_score = str(p1_treffer)
+                                p2_score = str(p2_treffer)
+                                    
+                            # Finalen Stand an den Beamer senden (mit Zusatzdaten)
+                            if self.beamer_window and tk.Toplevel.winfo_exists(self.beamer_window):
+                                self.beamer_window.update_live_score(
+                                    p1_score, p2_score, current_status,
+                                    p1_base=p1_treffer, p2_base=p2_treffer,
+                                    p1_total=(p1_treffer + p1_speed), p2_total=(p2_treffer + p2_speed)
+                                )
+                                
+                        except json.JSONDecodeError:
+                            # 🚨 Das passiert, wenn wir über WLAN lesen, während der Pi noch schreibt!
+                            # Wir tun NICHTS. Beim nächsten Tick in 333ms ist der Pi fertig mit Schreiben
+                            # und wir lesen die komplette Datei sauber ein.
+                            pass
+                            
             except Exception as e:
                 print(f"⚠️ [{zeit_jetzt}] Fehler in check_live_data: {e}")
 
