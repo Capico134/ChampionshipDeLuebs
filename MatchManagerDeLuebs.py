@@ -132,24 +132,26 @@ class MatchManager:
             return True
         return False
 
-    def trage_ergebnis_ein(self, base1, base2, total1, total2, pi_match_id="-", programm_name=""):
+    # --- NEU: timestamp als Parameter hinzugefügt ---
+    def trage_ergebnis_ein(self, base1, base2, total1, total2, pi_match_id="-", programm_name="", start_zeit="", timestamp=""):
         match = self.get_aktuelles_match()
         if not match: return
         
-        # --- FIX: Direkt die sauberen Argumente ins Update packen ---
         match.update({
             "base1": base1, 
             "base2": base2, 
             "total1": total1, 
             "total2": total2, 
             "pi_match_id": pi_match_id, 
-            "programm_name": programm_name, # <--- NEU: Ab in den Spielplan damit!
+            "programm_name": programm_name, 
+            "start_zeit": start_zeit, 
+            "timestamp": timestamp, # <--- NEU: Ab in den Spielplan!
             "gespielt": True
         })
             
         # --- ELA: Der Domino-Effekt! ---
-        # Wenn Basis-Werte (neu) eingetragen werden, verfällt ein eventuelles altes Stechen sofort.
         match.pop("stechen_notwendig", None)
+        # ... (Rest bleibt exakt gleich)
         match.pop("stechen_beendet", None)
         match.pop("stechen_b1", None)
         match.pop("stechen_b2", None)

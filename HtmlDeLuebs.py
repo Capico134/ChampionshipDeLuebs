@@ -1,15 +1,20 @@
 import os
+import datetime
 from TurnierLogikDeLuebs import generiere_setzliste
+import datetime # <--- WICHTIG: Für den Datums-Fallback!
 
 class HtmlExporter:
     def __init__(self, filename="./savegames/Turnierbericht.html"):
         self.filename = filename
 
-    def generiere_bericht(self, ergebnisse, spielplan=None, ko_spielplan=None, datei_manager=None, silent=False):
+    # --- NEU: meta_daten als Parameter hinzugefügt ---
+    def generiere_bericht(self, ergebnisse, spielplan=None, ko_spielplan=None, datei_manager=None, meta_daten=None, silent=False):
         if spielplan is None:
             spielplan = []
         if ko_spielplan is None:
             ko_spielplan = []
+        if meta_daten is None:
+            meta_daten = {}
             
         os.makedirs(os.path.dirname(self.filename), exist_ok=True)        
         
@@ -23,6 +28,49 @@ class HtmlExporter:
         finale = next((m for m in ko_spielplan if m.get("match_nr") == "FIN"), None)
         spiel_um_platz_3 = next((m for m in ko_spielplan if m.get("match_nr") == "3PL"), None)
         turnier_beendet = finale is not None and finale.get("gespielt") is True
+
+        # =================================================================
+        # --- 1. ELA-ERWEITERUNG: TURNIER-DATUM AUS _META ERMITTELN ---
+        # =================================================================
+        turnier_datum = ""
+        
+        # 1. Der neue, absolut saubere Weg über _meta
+        meta_ts = meta_daten.get("timestamp", "")
+        if meta_ts and " " in meta_ts:
+            try:
+                # "2026-06-14" wird für die deutsche Optik zu "14.06.26"
+                dt = datetime.datetime.strptime(meta_ts.split(" ")[0], "%Y-%m-%d")
+                turnier_datum = dt.strftime("%d.%m.%y")
+            except ValueError:
+                pass
+                
+        # 2. Fallback: Falls _meta doch mal fehlt, schauen wir in alte Spielpläne
+        if not turnier_datum:
+            for m in spielplan:
+                ts = m.get("timestamp", "")
+                if ts and len(ts) >= 8:
+                    turnier_datum = ts.split(" ")[0]
+                    break
+        
+        # 3. Absoluter Notfall-Fallback
+        if not turnier_datum:
+            turnier_datum = datetime.datetime.now().strftime("%d.%m.%y")
+
+        # --- DYNAMISCHER DATEINAME ---
+        # Wenn der Dateiname noch auf dem Standard "Turnierbericht.html" steht,
+        # formatieren wir ihn um zu "Turnier_YYYY-MM-DD.html"
+        if os.path.basename(self.filename) == "Turnierbericht.html":
+            try:
+                # Wir wandeln "14.06.26" um in das saubere ISO-Format "2026-06-14"
+                dt = datetime.datetime.strptime(turnier_datum, "%d.%m.%y")
+                iso_datum = dt.strftime("%Y-%m-%d")
+                
+                # Pfad neu zusammensetzen (behält den Ordner "./savegames/" bei)
+                verzeichnis = os.path.dirname(self.filename)
+                self.filename = os.path.join(verzeichnis, f"Turnier_{iso_datum}.html")
+            except Exception as e:
+                print(f"⚠️ Hinweis: Dynamischer Dateiname konnte nicht berechnet werden: {e}")
+
 
         # 1. Daten nach Gruppen aufteilen und sortieren
         gruppen_daten = {}
@@ -40,14 +88,13 @@ class HtmlExporter:
             )
 
         # --- OPTIMIERUNG (C): Logik für Qualifikanten nach oben gezogen! ---
-        # So steht sie für Punkt A (Highlighting), Punkt B (Setzliste) und den Pechvogel bereit.
         virtuelle_setzliste = generiere_setzliste(ergebnisse, gruppen_daten)
         limit = 8 if len(virtuelle_setzliste) > 8 else 4
         qualifiziert = {x["name"] for x in virtuelle_setzliste[:limit]}
         # -------------------------------------------------------------------
 
         # 3. HTML-Grundgerüst bauen
-        html = """
+        html = f"""
         <!DOCTYPE html>
         <html lang="de">
         <head>
@@ -58,42 +105,39 @@ class HtmlExporter:
             <meta http-equiv="pragma" content="no-cache">
             <meta http-equiv="expires" content="0">
             <style>
-                /* 1. Allgemeinen Hintergrund dunkler machen für maximalen Kontrast <-- NEU */
-                body { background-color: #111111; color: white; font-family: 'Segoe UI', Arial, sans-serif; padding: 15px; line-height: 1.6; }
+                body {{ background-color: #111111; color: white; font-family: 'Segoe UI', Arial, sans-serif; padding: 15px; line-height: 1.6; }}
                 
-                h1 { color: #00ff00; text-align: center; font-size: 2.2em; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 5px; }
-                h2 { color: #00ff00; border-bottom: 2px solid #333; padding-bottom: 8px; margin-top: 30px; }
-                h3 { color: #ffffff; background-color: #333; padding: 10px; margin-bottom: 0; border-top-left-radius: 5px; border-top-right-radius: 5px; }
-                .table-container { max-width: 800px; margin: 0 auto 30px auto; }
-                table { width: 100%; border-collapse: collapse; background-color: #222; }
-                th, td { border: 1px solid #444; padding: 10px; text-align: center; }
-                th { background-color: #2a2a2a; color: #00ff00; font-weight: bold; }
-                tr:nth-child(even) { background-color: #262626; }
-                .highlight-gold { color: #ffd700; font-weight: normal; }
-                .award-box { background-color: #222; max-width: 760px; margin: 20px auto; padding: 15px; border-left: 6px solid #ffcc00; }
-                .award-title { color: #ffcc00; margin-top: 0; font-size: 1.3em; }
+                h1 {{ color: #00ff00; text-align: center; font-size: 2.2em; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 5px; }}
+                .turnier-datum {{ text-align: center; color: #888888; font-size: 1.1em; margin-bottom: 30px; font-weight: bold; }}
+                
+                h2 {{ color: #00ff00; border-bottom: 2px solid #333; padding-bottom: 8px; margin-top: 30px; }}
+                h3 {{ color: #ffffff; background-color: #333; padding: 10px; margin-bottom: 0; border-top-left-radius: 5px; border-top-right-radius: 5px; }}
+                .table-container {{ max-width: 800px; margin: 0 auto 30px auto; overflow-x: auto; }}
+                table {{ width: 100%; border-collapse: collapse; background-color: #222; }}
+                th, td {{ border: 1px solid #444; padding: 10px; text-align: center; }}
+                th {{ background-color: #2a2a2a; color: #00ff00; font-weight: bold; }}
+                tr:nth-child(even) {{ background-color: #262626; }}
+                .highlight-gold {{ color: #ffd700; font-weight: normal; }}
+                .award-box {{ background-color: #222; max-width: 760px; margin: 20px auto; padding: 15px; border-left: 6px solid #ffcc00; }}
+                .award-title {{ color: #ffcc00; margin-top: 0; font-size: 1.3em; }}
                 
                 /* Podium Styles */
-                .podium-container { display: flex; justify-content: center; align-items: flex-end; max-width: 800px; margin: 30px auto 70px auto; height: 180px; gap: 10px; }
-                .podium-step { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; width: 30%; color: #000; text-align: center; padding-bottom: 10px; border-top-left-radius: 8px; border-top-right-radius: 8px; box-shadow: 0 -4px 10px rgba(0,0,0,0.5); }
-                .podium-name { font-weight: bold; font-size: 0.95em; margin-bottom: -130px; background-color: rgba(0,0,0,0.8); color: white; padding: 4px 10px; border-radius: 4px; border: 2px solid white; }
-                .step-1 { background: linear-gradient(to bottom, #FFD700, #B8860B); height: 160px; z-index: 3; }
-                .step-2 { background: linear-gradient(to bottom, #E0E0E0, #909090); height: 110px; z-index: 2; }
-                .step-3 { background: linear-gradient(to bottom, #CD7F32, #8B4513); height: 70px; z-index: 1; }
-                .podium-medal { font-size: 2em; margin-bottom: -5px; }
+                .podium-container {{ display: flex; justify-content: center; align-items: flex-end; max-width: 800px; margin: 30px auto 70px auto; height: 180px; gap: 10px; }}
+                .podium-step {{ display: flex; flex-direction: column; align-items: center; justify-content: flex-end; width: 30%; color: #000; text-align: center; padding-bottom: 10px; border-top-left-radius: 8px; border-top-right-radius: 8px; box-shadow: 0 -4px 10px rgba(0,0,0,0.5); }}
+                .podium-name {{ font-weight: bold; font-size: 0.95em; margin-bottom: -130px; background-color: rgba(0,0,0,0.8); color: white; padding: 4px 10px; border-radius: 4px; border: 2px solid white; }}
+                .step-1 {{ background: linear-gradient(to bottom, #FFD700, #B8860B); height: 160px; z-index: 3; }}
+                .step-2 {{ background: linear-gradient(to bottom, #E0E0E0, #909090); height: 110px; z-index: 2; }}
+                .step-3 {{ background: linear-gradient(to bottom, #CD7F32, #8B4513); height: 70px; z-index: 1; }}
+                .podium-medal {{ font-size: 2em; margin-bottom: -5px; }}
                 
-                /* 2. BEIDE Klassen bekommen nun einen schicken Rahmen und Schatten <-- NEU */
-                .section-block { padding: 15px 20px; border-radius: 12px; margin-bottom: 30px; }
-                
-                /* Der etwas hellere Block */
-                .bg-light { background-color: #2c2c2c; border: 1px solid #333; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
-                
-                /* Der etwas dunklere Block (aber immer noch heller als der neue tiefe Hintergrund!) */
-                .bg-dark { background-color: #181818; border: 1px solid #262626; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }                
+                .section-block {{ padding: 15px 20px; border-radius: 12px; margin-bottom: 30px; overflow-x: auto; }}
+                .bg-light {{ background-color: #2c2c2c; border: 1px solid #333; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }}
+                .bg-dark {{ background-color: #181818; border: 1px solid #262626; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }}                
             </style>
         </head>
         <body>
             <h1>🎯 Bericht 🎯</h1>
+            <div class="turnier-datum">📅 Turniertag: {turnier_datum}</div>
         """
 
         # PROJEKT-HEADER
@@ -161,7 +205,7 @@ class HtmlExporter:
         
         # 5. GRUPPENÜBERSICHT
         if mit_gruppenuebersicht:
-            html += get_section_start() # <-- NEU: Hier öffnen wir den Rahmen!
+            html += get_section_start()
             html += "<h2>📊 Die Gruppenphase</h2>"
             
             for gruppe in sorted(gruppen_daten.keys()):
@@ -199,7 +243,7 @@ class HtmlExporter:
                     </table>
                 </div>
                 """
-            html += "</div>" # <-- NEU: Rahmen wieder schließen!
+            html += "</div>"
 
 
         # 6. EINZELNE GRUPPENSPIELE
@@ -211,46 +255,55 @@ class HtmlExporter:
                 <table>
                     <tr style="border-bottom: 2px solid #00ff00;">
                         <th>Nr.</th>
+                        <th>Zeit</th>
                         <th>Grp</th>
                         <th style="text-align: left;">Paarung</th>
                         <th>Turnierpunkte</th>
                         <th>Treffer</th>
                         <th>Match-Wertung</th>
-                    </tr>
+                        </tr>
             """
-            
-            letzte_gruppe = None # <-- NEU: Variable, um sich die Gruppe des vorherigen Matches zu merken
+            letzte_gruppe = None
             
             for m in spielplan:
                 aktuelle_gruppe = m.get('gruppe', '-')
                 
-                # --- NEU: Prüfen, ob die Gruppe gewechselt hat ---
                 if letzte_gruppe is not None and aktuelle_gruppe != letzte_gruppe:
-                    # Wenn ja: Eine dicke graue Linie als Trenner nach oben ziehen
                     tr_style = ' style="border-top: 2px solid #777;"'
                 else:
                     tr_style = ''
                     
-                letzte_gruppe = aktuelle_gruppe # Aktuelle Gruppe für den nächsten Durchlauf speichern
+                letzte_gruppe = aktuelle_gruppe 
                 
                 if m.get("gespielt"):
+                    # 1. Versuch: Die neue, echte Startzeit ("23:47:51")
+                    start_z = m.get("start_zeit", "")
+                    if start_z:
+                        uhrzeit = start_z[:5] # Nimm einfach die ersten 5 Zeichen ("23:47")
+                    else:
+                        # 2. Fallback für alte Matches: Den Timestamp ("14.06.26 20:24:00") zerteilen
+                        ts = m.get("timestamp", "")
+                        uhrzeit = ts.split(" ")[1][:5] if (ts and " " in ts) else "--:--"
+
                     b1, b2 = m.get('base1', 0), m.get('base2', 0)
                     treffer = f"{b1} : {b2}"
                     gesamt = f"{m.get('total1', 0):.2f} : {m.get('total2', 0):.2f}"
+                    prog_name = m.get("programm_name", "-")
                     
-                    # --- Punkte für die neue Spalte berechnen ---
                     if b1 > b2: t_punkte = "3 : 0"
                     elif b1 < b2: t_punkte = "0 : 3"
                     else: t_punkte = "1 : 1"
                 else:
+                    uhrzeit = "--:--"
                     treffer = "- : -"
                     gesamt = "- : -"
                     t_punkte = "- : -"
+                    prog_name = "-"
 
-                # --- NEU: Den tr_style in das <tr> Tag einfügen ---
                 html += f"""
                     <tr{tr_style}>
                         <td style="color: #ffffff;">{m.get('match_nr', '-')}</td>
+                        <td style="color: #888888; font-weight: 500;">{uhrzeit}</td>
                         <td style="color: #ffffff;">{aktuelle_gruppe}</td>
                         <td style="text-align: left;"><strong>{m.get('spieler1', '')}</strong> vs. <strong>{m.get('spieler2', '')}</strong></td>
                         <td style="color: #00ff00; font-weight: bold;">{t_punkte}</td>
@@ -262,7 +315,7 @@ class HtmlExporter:
                 </table>
             </div>
             """
-            html += "</div>" # <-- Rahmen wieder schließen!
+            html += "</div>"
 
 
         # 7. DIE K.O.-PHASE
@@ -272,8 +325,9 @@ class HtmlExporter:
             html += """
             <div class="table-container">
                 <table>
-                    <tr>
+                    <tr style="border-bottom: 2px solid #00ff00;">
                         <th>Phase</th>
+                        <th>Zeit</th>
                         <th style="text-align: left;">Paarung</th>
                         <th>Match-Wertung</th>
                         <th>Treffer</th>
@@ -287,8 +341,18 @@ class HtmlExporter:
                 paarung = f"<strong>{m.get('spieler1', '')}</strong> vs. <strong>{m.get('spieler2', '')}</strong>"
                 
                 if m.get("gespielt"):
+                    # 1. Versuch: Die neue, echte Startzeit ("23:47:51")
+                    start_z = m.get("start_zeit", "")
+                    if start_z:
+                        uhrzeit = start_z[:5] # Nimm einfach die ersten 5 Zeichen ("23:47")
+                    else:
+                        # 2. Fallback für alte Matches: Den Timestamp ("14.06.26 20:24:00") zerteilen
+                        ts = m.get("timestamp", "")
+                        uhrzeit = ts.split(" ")[1][:5] if (ts and " " in ts) else "--:--"
+
                     treffer = f"{m.get('base1', 0)} : {m.get('base2', 0)}"
                     gesamt = f"{m.get('total1', 0):.2f} : {m.get('total2', 0):.2f}"
+                    prog_name = m.get("programm_name", "-")
                     
                     if m.get("stechen_beendet"):
                         stechen_str = f"{m.get('stechen_b1', 0)}:{m.get('stechen_b2', 0)}"
@@ -296,13 +360,16 @@ class HtmlExporter:
                     
                     sieger = f"<span class='highlight-gold'>🏆 {m.get('winner', '')}</span>"
                 else:
+                    uhrzeit = "--:--"
                     treffer = "- : -"
                     gesamt = "- : -"
                     sieger = "---"
+                    prog_name = "-"
 
                 html += f"""
                     <tr>
                         <td style="color: #ffffff;">{phase}</td>
+                        <td style="color: #888888; font-weight: 500;">{uhrzeit}</td>
                         <td style="text-align: left;">{paarung}</td>
                         <td style="color: #00ff00; font-weight: bold;">{gesamt}</td>
                         <td style="color: #ffffff;">{treffer}</td>
@@ -313,7 +380,7 @@ class HtmlExporter:
                 </table>
             </div>
             """
-            html += "</div>" # <-- NEU: Rahmen wieder schließen!
+            html += "</div>"
 
 
 
@@ -460,7 +527,7 @@ class HtmlExporter:
                     </table>
                 </div>
             """
-            html += "</div>" # <-- NEU: Rahmen der GRUPPENPHASEN-Awards wieder schließen!
+            html += "</div>"
 
 
             # ==========================================
@@ -528,7 +595,7 @@ class HtmlExporter:
                         html += f"<li style='margin-bottom: 5px;'><strong>{name}</strong> <em>(geschossen im {phase})</em></li>"
                     html += "</ul></div>"
                     
-                html += "</div>" # <-- NEU: Rahmen der K.O.-PHASEN-Awards wieder schließen!
+                html += "</div>"
                     
         html += """
         </body>
@@ -539,10 +606,13 @@ class HtmlExporter:
             with open(self.filename, "w", encoding="utf-8") as f:
                 f.write(html)
             
+            # Für die Erfolgsmeldung isolieren wir den reinen Dateinamen (z.B. Turnier_2026-06-14.html)
+            reiner_dateiname = os.path.basename(self.filename)
+
             if not silent and os.name == 'nt':
                 absoluter_pfad = os.path.abspath(self.filename)
                 os.startfile(absoluter_pfad)
                 
-            return True, f"Der Bericht wurde erfolgreich erstellt!\nEr liegt im Ordner: savegames\nDu kannst ihn jetzt in WhatsApp teilen."
+            return True, f"Der Bericht wurde erfolgreich erstellt!\n\nDatei: savegames/{reiner_dateiname}\n\nDu kannst ihn jetzt öffnen und in WhatsApp teilen."
         except Exception as e:
             return False, f"Fehler beim Speichern oder Öffnen:\n{e}"

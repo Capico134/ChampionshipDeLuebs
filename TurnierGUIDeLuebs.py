@@ -524,7 +524,10 @@ class TurnierGUI:
         t1, t2 = d.get("gesamtpunkte", 0), d.get("gesamtpunkte_pl2", 0)
         pi_id = d.get("match_id", "-")
         prog_name = d.get("programm_name", "Unbekanntes Programm")
-        print(prog_name)
+        
+        # --- FIX: Komma entfernt und timestamp hinzugefügt ---
+        start_z = d.get("start_zeit", "--:--") 
+        timestamp_z = d.get("timestamp", "--:--")
 
         # 1. Den Manager die richtige Funktion ausführen lassen
         if szenario == "STECHEN_AKTIV":
@@ -533,7 +536,13 @@ class TurnierGUI:
             self.match_manager.aktiviere_stechen(b1, b2, t1, t2, pi_id)
             self.match_zu_pi() # Den Pi nochmal antriggern 
         else:
-            self.match_manager.trage_ergebnis_ein(b1, b2, t1, t2, pi_id, programm_name=prog_name)
+            # --- NEU: Den timestamp_z mit übergeben! ---
+            self.match_manager.trage_ergebnis_ein(
+                b1, b2, t1, t2, pi_id, 
+                programm_name=prog_name, 
+                start_zeit=start_z, 
+                timestamp=timestamp_z
+            )
 
         # 2. Zentrale Abschlussarbeiten erledigen
         self._abschluss_routine()
@@ -541,17 +550,23 @@ class TurnierGUI:
     def _abschluss_routine(self):
         """Erledigt alle Speicher- und Update-Aufgaben nach jedem veränderten Match zentral."""
         self.update_all_displays()
-        self.datei_manager.speichere_turnier_stand(self.match_manager.get_state())
+        
+        # --- FIX: Wir holen uns den State und speichern ihn in der Variable 'turnier_state' ---
+        turnier_state = self.match_manager.get_state()
+        
+        # Jetzt übergeben wir einfach die Variable zum Speichern...
+        self.datei_manager.speichere_turnier_stand(turnier_state)
         self.datei_manager.loesche_live_datei()
         
-        # Der lautlose HTML-Drucker im Hintergrund
+        # ...und können die Variable unten bei _meta problemlos auslesen!
         self.html_exporter.generiere_bericht(
             ergebnisse=self.match_manager.ergebnisse, 
             spielplan=self.match_manager.spielplan,
             ko_spielplan=self.match_manager.ko_spielplan,
             datei_manager=self.datei_manager,
+            meta_daten=turnier_state.get("_meta", {}), 
             silent=True 
-        )        
+        )   
             
     def open_score_dialog(self, title, match, start_values, save_callback):
         """Allgemeine ELA-Schablone für alle Match-Eingabe-Popups."""
