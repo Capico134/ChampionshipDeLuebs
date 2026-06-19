@@ -22,6 +22,7 @@ class MatchManager:
 #        self.phase = "GRUPPE" 
         # --- ELA: Sauberer initialer Status ---
         self.phase = TurnierPhase.NICHT_GESTARTET
+        self.derby_modus = False
 
         self.ko_spielplan = []
         self.ko_aktuell_index = 0
@@ -131,73 +132,85 @@ class MatchManager:
             self._trigger_match_changed()
             return True
         return False
-
-    # --- NEU: timestamp als Parameter hinzugefügt ---
-    def trage_ergebnis_ein(self, base1, base2, total1, total2, pi_match_id="-", programm_name="", start_zeit="", timestamp=""):
-        match = self.get_aktuelles_match()
-        if not match: return
         
+    # --- NEU: s1 und s2 werden übergeben, falls wir ein neues Derby-Match anlegen müssen! ---
+    def trage_ergebnis_ein(self, base1, base2, total1, total2, pi_match_id="-", programm_name="", start_zeit="", timestamp="", s1="", s2=""):
+        
+        # ==============================================================
+        # --- DERBY LOGIK: Völlig neues Match erzeugen! ---
+        # ==============================================================
+        if self.derby_modus and self.phase == TurnierPhase.GRUPPENPHASE:
+            
+            # --- NEU: Wartezimmer leeren, da das Match jetzt "echt" ist ---
+            self.derby_pending_p1 = None
+            self.derby_pending_p2 = None
+            # --------------------------------------------------------------
+            
+            match = {
+                "match_nr": len(self.spielplan) + 1,
+                "gruppe": "Derby",
+                "spieler1": s1,
+                "spieler2": s2,
+                "gespielt": False
+            }
+            
+            self.spielplan.append(match)
+            self.aktuelles_match_index = len(self.spielplan) - 1 # Damit es als "aktuell" gilt
+            
+            # Sicherheits-Check: Falls ein neuer Kumpel spontan mitspielt, 
+            # legen wir ihn sofort in der Tabelle an!
+            for spieler in (s1, s2):
+                if spieler not in self.ergebnisse:
+                    self.ergebnisse[spieler] = {"gruppe": "Derby", "spiele": 0, "punkte": 0, "score_erzielt": 0.0, "score_kassiert": 0.0, "differenz": 0.0}
+                    if spieler not in self.gruppen.get("Derby", []):
+                        self.gruppen.setdefault("Derby", []).append(spieler)
+        else:
+            # NORMALES TURNIER
+            match = self.get_aktuelles_match()
+            if not match: return
+        
+        # Update ausführen
         match.update({
-            "base1": base1, 
-            "base2": base2, 
-            "total1": total1, 
-            "total2": total2, 
-            "pi_match_id": pi_match_id, 
-            "programm_name": programm_name, 
-            "start_zeit": start_zeit, 
-            "timestamp": timestamp, # <--- NEU: Ab in den Spielplan!
-            "gespielt": True
+            "base1": base1, "base2": base2, "total1": total1, "total2": total2, 
+            "pi_match_id": pi_match_id, "programm_name": programm_name, 
+            "start_zeit": start_zeit, "timestamp": timestamp, "gespielt": True
         })
             
-        # --- ELA: Der Domino-Effekt! ---
         match.pop("stechen_notwendig", None)
-        # ... (Rest bleibt exakt gleich)
         match.pop("stechen_beendet", None)
         match.pop("stechen_b1", None)
         match.pop("stechen_b2", None)
-        # -------------------------------
 
         if self.phase == TurnierPhase.GRUPPENPHASE:
             self.recalculate_stats()
         else:
-            s1, s2 = match["spieler1"], match["spieler2"]
-            if base1 > base2: winner, loser = s1, s2
-            elif base2 > base1: winner, loser = s2, s1
+            s_1, s_2 = match["spieler1"], match["spieler2"]
+            if base1 > base2: winner, loser = s_1, s_2
+            elif base2 > base1: winner, loser = s_2, s_1
             else: 
-                winner = s1 if total1 >= total2 else s2
-                loser = s2 if winner == s1 else s1
+                winner = s_1 if total1 >= total2 else s_2
+                loser = s_2 if winner == s_1 else s_1
             
-            match["winner"] = winner
-            match["loser"] = loser
+            match["winner"], match["loser"] = winner, loser
             self.update_ko_tree(match["match_nr"], winner, loser)
             
-        # --- ELA: Alles in einem Abwasch erledigen! ---
-        self.match_abschliessen() # Springt automatisch ein Spiel weiter und triggert den Event!
-        self._evaluiere_turnier_status() # Prüft, ob das Turnier/die Phase nun vorbei ist
-        
-        # Hinweis: _trigger_match_changed() müssen wir hier NICHT nochmal rufen, 
-        # weil match_abschliessen() das bereits für uns tut!
+        self.match_abschliessen() 
+        self._evaluiere_turnier_status() 
         return True
-
+        
+        
     def evaluiere_match_szenario(self, t1, t2):
-        """
-        Prüft ein eingehendes Ergebnis und sagt der GUI, welches Szenario vorliegt.
-        Rückgabe: 'STECHEN_AKTIV', 'GLEICHSTAND', 'NORMAL' oder 'FEHLER'
-        """
         match = self.get_aktuelles_match()
+        
+        # --- FIX: Im Derby ist 'match' anfangs None. Das ist völlig okay und NORMAL! ---
         if not match: 
+            if self.derby_modus and self.phase == TurnierPhase.GRUPPENPHASE:
+                return "NORMAL"
             return "FEHLER"
             
-        # Szenario A: Wir sind bereits in einem laufenden Stechen
-        if match.get("stechen_notwendig"):
-            return "STECHEN_AKTIV"
-            
-        # Szenario B: K.O.-Phase und exakter Gleichstand (auf 2 Nachkommastellen)
+        if match.get("stechen_notwendig"): return "STECHEN_AKTIV"
         is_ko = self.phase in [TurnierPhase.KO_PHASE, TurnierPhase.BEENDET]
-        if is_ko and round(t1, 2) == round(t2, 2):
-            return "GLEICHSTAND"
-            
-        # Szenario C: Ein ganz normales Match (Gruppe oder klares K.O.-Match)
+        if is_ko and round(t1, 2) == round(t2, 2): return "GLEICHSTAND"
         return "NORMAL"
 
 
@@ -359,48 +372,40 @@ class MatchManager:
 
     def get_state(self):
         return {
-            # --- ELA-Metadaten Block (Sauber und streng typisiert) ---
             "_meta": {
                 "app_version": self.app_version, 
                 "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             },
-            
-            # --- FIX: Gruppen sind wieder da! Teilnehmer bleiben gelöscht. ---
             "gruppen": self.gruppen,
-            
             "spielplan": self.spielplan, 
             "aktuelles_match_index": self.aktuelles_match_index,
             "ergebnisse": self.ergebnisse, 
             "gruppen_zeiten": self.gruppen_zeiten,
-            
-            # WICHTIG: Der Key bleibt "turnier_modus", die Variable ist self.phase
             "turnier_modus": self.phase.name, 
+            
+            # --- NEU: Derby-Modus mit speichern ---
+            "derby_modus": self.derby_modus,
             
             "ko_spielplan": self.ko_spielplan,
             "ko_aktuell_index": self.ko_aktuell_index
         }
 
     def load_state(self, state_dict):
-        #self.teilnehmer = state_dict.get("teilnehmer", [])
         self.gruppen = state_dict.get("gruppen", {})
         self.spielplan = state_dict.get("spielplan", [])
         self.aktuelles_match_index = state_dict.get("aktuelles_match_index", 0)
         self.ergebnisse = state_dict.get("ergebnisse", {})
         self.gruppen_zeiten = state_dict.get("gruppen_zeiten", {})
+        
+        # --- NEU: Derby-Modus wieder laden ---
+        self.derby_modus = state_dict.get("derby_modus", False)
 
-        # 1. Wert aus der JSON lesen (Fallback: NICHT_GESTARTET)
         geladener_modus = state_dict.get("turnier_modus", "NICHT_GESTARTET").upper()
-        # 2. Übersetzungs-Wörterbuch für alte oder manuell falsch getippte Versionen
-        legacy_mapping = {
-            "GRUPPE": "GRUPPENPHASE",
-            "KO": "KO_PHASE"
-        }
+        legacy_mapping = {"GRUPPE": "GRUPPENPHASE", "KO": "KO_PHASE"}
         geladener_modus = legacy_mapping.get(geladener_modus, geladener_modus)
-        # 3. Kugelsichere Umwandlung ins Enum (Verhindert Absturz bei Tippfehlern in der JSON)
         try:
             self.phase = TurnierPhase[geladener_modus]
         except KeyError:
-            print(f"⚠️ Warnung: Unbekannter Turnier-Modus '{geladener_modus}' in JSON. Setze auf NICHT_GESTARTET.")
             self.phase = TurnierPhase.NICHT_GESTARTET
 
         self.ko_spielplan = state_dict.get("ko_spielplan", [])
@@ -412,13 +417,19 @@ class MatchManager:
         """Prüft vollautomatisch, ob alle Spiele einer Phase gespielt wurden und schaltet die Enum um."""
         
         if self.phase in [TurnierPhase.GRUPPENPHASE, TurnierPhase.GRUPPEN_ABGESCHLOSSEN]:
+            
+            # =======================================================
+            # --- FIX: Ein Derby beendet sich NIEMALS automatisch! ---
+            # =======================================================
+            if getattr(self, "derby_modus", False): 
+                return 
+            
             alle_fertig = len(self.spielplan) > 0 and all(m.get("gespielt", False) for m in self.spielplan)
-            # Automatischer Wechsel! (Auch zurück zur GRUPPENPHASE, falls man ein Match resettet)
+            # Automatischer Wechsel! 
             self.phase = TurnierPhase.GRUPPEN_ABGESCHLOSSEN if alle_fertig else TurnierPhase.GRUPPENPHASE
             
         elif self.phase in [TurnierPhase.KO_PHASE, TurnierPhase.BEENDET]:
             alle_fertig = len(self.ko_spielplan) > 0 and all(m.get("gespielt", False) for m in self.ko_spielplan)
-            # Automatischer Wechsel, sobald das letzte K.O.-Match beendet ist!
             self.phase = TurnierPhase.BEENDET if alle_fertig else TurnierPhase.KO_PHASE
             
     def aktiviere_stechen(self, b1, b2, t1, t2, pi_match_id):

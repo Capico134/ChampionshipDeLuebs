@@ -222,6 +222,9 @@ class PublicDisplay(tk.Toplevel):
         match = self.match_manager.get_aktuelles_match()
         next_m = self.match_manager.get_naechstes_match()
         phase = getattr(self.match_manager, 'phase', TurnierPhase.NICHT_GESTARTET)
+        
+        # --- NEU: Derby-Status abfragen ---
+        derby = getattr(self.match_manager, 'derby_modus', False)
 
         # Prüfen ob Finale gespielt ist
         is_ko = phase in [TurnierPhase.KO_PHASE, TurnierPhase.BEENDET]
@@ -234,9 +237,24 @@ class PublicDisplay(tk.Toplevel):
             # --- TURNIER BEENDET -> PODEST AUF DER LINKEN SEITE ---
             self.render_podium(self.left_frame, finale)
         else:
-            # --- TURNIER LÄUFT ODER WARTET -> NORMALE ANZEIGE LINKS ---
             self.lbl_status = tk.Label(self.left_frame, font=("Arial", 20), bg="#1a1a1a", fg="#aaaaaa")
             self.lbl_status.pack(anchor="w")
+
+            # ==============================================================
+            # --- FIX: DUMMY-MATCH FÜR DERBY ERZEUGEN ---
+            # ==============================================================
+            if derby and not match and phase == TurnierPhase.GRUPPENPHASE:
+                
+                # --- NEU: Namen aus dem Wartezimmer holen (mit Fallback) ---
+                p1_wait = getattr(self.match_manager, 'derby_pending_p1', None) or "Warte auf..."
+                p2_wait = getattr(self.match_manager, 'derby_pending_p2', None) or "Spieler..."
+                
+                match = {
+                    "spieler1": p1_wait,
+                    "spieler2": p2_wait,
+                    "gruppe": "Derby",
+                    "match_nr": len(self.match_manager.spielplan) + 1
+                }
 
             if match:
                 # --- NEU: Horizontaler Container für Match (Links) und Details (Rechts) ---
@@ -550,6 +568,24 @@ class PublicDisplay(tk.Toplevel):
         # Der große "Enthüllungs"-Trigger: Sind alle Gruppenspiele durch?
         gruppen_beendet = (akt_match is None and getattr(self.match_manager, 'phase', TurnierPhase.NICHT_GESTARTET) == TurnierPhase.GRUPPEN_ABGESCHLOSSEN)
 
+        # ==========================================================
+        # --- NEU: King of the Hill für das Derby ermitteln ---
+        # ==========================================================
+        derby_king = ""
+        is_derby = getattr(self.match_manager, 'derby_modus', False)
+        
+        if is_derby:
+            # Wir suchen das allerletzte Match, das bereits GESPIELT wurde
+            gespielte = [m for m in self.match_manager.spielplan if m.get("gespielt")]
+            if gespielte:
+                letztes = gespielte[-1]
+                # Bei Gleichstand bleibt Spieler 1 auf dem Thron
+                if letztes.get("total1", 0) >= letztes.get("total2", 0):
+                    derby_king = letztes.get("spieler1", "")
+                else:
+                    derby_king = letztes.get("spieler2", "")
+        # ==========================================================
+
         for g in page_gruppen_keys:
             # --- ELA: Info-Text auslesen und dynamisch formatieren ---
             info_text = self.match_manager.gruppen_zeiten.get(g, "").strip()
@@ -585,11 +621,26 @@ class PublicDisplay(tk.Toplevel):
                     name_fg = "white"
                     rang_text = f"{i+1}."
 
+                # ==========================================================
+                # --- NEU: DEN KING KRÖNEN! ---
+                # ==========================================================
+                anzeige_name = s['name']
+                name_font_weight = "bold" if is_qualified else "normal"
+                
+                if is_derby and anzeige_name == derby_king:
+                    anzeige_name = f"👑 {anzeige_name}"
+                    name_fg = "#ffd700"  # Leuchtendes Gold!
+                    #name_font_weight = "bold"
+                # ==========================================================
+
                 f = tk.Frame(self.table_container, bg=bg); f.pack(fill="x", pady=1)
                 
                 # --- Alle Daten (außer Name) zentrieren ---
                 tk.Label(f, text=rang_text, font=("Arial", 14, "bold"), bg=bg, fg="white" if not is_qualified else "#39FF14", width=4, anchor="center").pack(side="left")
-                tk.Label(f, text=s['name'], font=("Arial", 14, "bold" if is_qualified else "normal"), bg=bg, fg=name_fg, width=15, anchor="w").pack(side="left")
+                
+                # FIX: Hier setzen wir nun 'anzeige_name' und 'name_font_weight' ein!
+                tk.Label(f, text=anzeige_name, font=("Arial", 14, name_font_weight), bg=bg, fg=name_fg, width=15, anchor="w").pack(side="left")
+                
                 tk.Label(f, text=s['spiele'], font=("Arial", 14), bg=bg, fg="white", width=3, anchor="center").pack(side="left")
                 tk.Label(f, text=s['punkte'], font=("Arial", 14, "bold"), bg=bg, fg="#00ff00", width=4, anchor="center").pack(side="left")
                 tk.Label(f, text=f"{s['differenz']:+.2f}", font=("Arial", 14), bg=bg, fg="#aaa", width=8, anchor="center").pack(side="left")
@@ -682,9 +733,16 @@ class PublicDisplay(tk.Toplevel):
         self.scroll_job = self.after(20, self.scroll_text)            
         
     #AB HIER LIVE TICKER
-    def update_live_score(self, p1_points, p2_points, status, p1_base=0, p2_base=0, p1_total=0.0, p2_total=0.0):
-        """Aktualisiert die Live-Punkte und den Status auf dem Beamer."""
+    def update_live_score(self, p1_points, p2_points, status, p1_base=0, p2_base=0, p1_total=0.0, p2_total=0.0, p1_name=None, p2_name=None):
+        """Aktualisiert die Live-Punkte, den Status und optional die Namen auf dem Beamer."""
         
+        # --- NEU: Spielernamen live vom Pi übernehmen (Wichtig für Derby!) ---
+        if p1_name and hasattr(self, 'lbl_p1_name') and self.lbl_p1_name.winfo_exists():
+            self.lbl_p1_name.config(text=truncate_text(p1_name, 14))
+            
+        if p2_name and hasattr(self, 'lbl_p2_name') and self.lbl_p2_name.winfo_exists():
+            self.lbl_p2_name.config(text=truncate_text(p2_name, 14))
+            
         # 1. Punktestand immer aktualisieren
         if p1_points is not None:
             if hasattr(self, 'lbl_score_p1') and self.lbl_score_p1.winfo_exists():

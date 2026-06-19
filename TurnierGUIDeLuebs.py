@@ -9,6 +9,7 @@ import json #Für Live-Ticker
 import ctypes
 import datetime # <--- WICHTIG: Import für die Zeit
 import tkinter.font as tkFont
+import random # Für Derby-Zufall
 
 # --- Windows High-DPI Fix für gestochen scharfe Schriften ---
 try:
@@ -75,6 +76,7 @@ class TurnierGUI:
         self.var_groups_per_page = tk.IntVar(value=3)
         self.gruppen_groesse_var = tk.IntVar(value=4)
         self.zufall_var = tk.BooleanVar(value=True)
+        self.derby_var = tk.BooleanVar(value=False)
         self.ticker_var = tk.StringVar() 
         # -------------------------------------------------------------------------
 
@@ -213,6 +215,13 @@ class TurnierGUI:
             rahmen_top, 
             text="Spieler zufällig auf Gruppen verteilen", 
             variable=self.zufall_var
+        ).pack(side=tk.LEFT, padx=(30, 0))
+
+        # --- NEU: Derby Checkbox ---
+        ttk.Checkbutton(
+            rahmen_top, 
+            text="Derby-Modus (Freies Spiel)", 
+            variable=self.derby_var
         ).pack(side=tk.LEFT, padx=(30, 0))
 
         # 2. Das Label für das Textfeld anpassen
@@ -391,44 +400,40 @@ class TurnierGUI:
     # --- LOGIK ---
     def turnier_starten(self):
         namen_text = self.name_input.get("1.0", tk.END).strip()
-        namen = [n for n in namen_text.split("\n") if n.strip()] # Leere Zeilen ignorieren
+        namen = [n for n in namen_text.split("\n") if n.strip()]
         
-        # 1. Die eingestellte Gruppengröße sicher auslesen
         try:
             gruppen_groesse = self.gruppen_groesse_var.get()
         except tk.TclError:
-            gruppen_groesse = 4 # Fallback, falls das Feld leer gemacht wurde
+            gruppen_groesse = 4 
 
-        # 2. Dynamische Prüfung der Teilnehmerzahl anhand der neuen Variable
-        if len(namen) < gruppen_groesse or len(namen) % gruppen_groesse != 0:
-            messagebox.showerror(
-                "Fehler", 
-                f"Aktuell {len(namen)} Teilnehmer.\nDie Teilnehmerzahl muss ein Vielfaches der Gruppengröße ({gruppen_groesse}) sein!"
-            )
-            return
+        # --- NEU: Derby prüfen ---
+        soll_derby_sein = self.derby_var.get()
+        self.match_manager.derby_modus = soll_derby_sein
+        
+        if soll_derby_sein:
+            # Im Derby ignorieren wir Teilnehmer-Regeln und bauen einen leeren Plan!
+            gruppen = {"Derby": namen}
+            plan = []
+        else:
+            if len(namen) < gruppen_groesse or len(namen) % gruppen_groesse != 0:
+                messagebox.showerror("Fehler", f"Aktuell {len(namen)} Teilnehmer.\nDie Teilnehmerzahl muss ein Vielfaches der Gruppengröße ({gruppen_groesse}) sein!")
+                return
+                
+            soll_zufall_sein = self.zufall_var.get()
+            try:
+                gruppen, plan = generiere_spielplan(namen, gruppen_groesse, zufall=soll_zufall_sein)
+            except ValueError as e:
+                messagebox.showerror("Namen-Fehler", str(e))
+                return
             
         with open("teilnehmer.txt", "w", encoding="utf-8") as f:
             f.write(namen_text)
             
-        # 3. Den neuen Zufall-Schalter auslesen
-        soll_zufall_sein = self.zufall_var.get()
-            
-        # 4. Den dynamischen Parameter an unsere TurnierLogik übergeben!
-        try:
-            gruppen, plan = generiere_spielplan(namen, gruppen_groesse, zufall=soll_zufall_sein)
-        except ValueError as e:
-            # Fängt den Fehler von oben ab und zeigt ihn als Pop-up!
-            messagebox.showerror("Namen-Fehler", str(e))
-            return
-        
-        # Diese drei Dinge braucht nur der Turnier-Start (GUI-spezifisch)
         self.match_manager.setze_turnier_daten(gruppen, plan)
         self.build_time_inputs()
         self.notebook.select(1)
-        
-        # --- ELA: Unsere neue All-in-One Abschlussschleuse! ---
         self._abschluss_routine()
-
     def start_ko_phase_gui(self):
         # 1. Smarte Warnung anhand der State-Machine
         if getattr(self.match_manager, "phase", None) == TurnierPhase.GRUPPENPHASE:
@@ -472,8 +477,19 @@ class TurnierGUI:
         s1, s2 = d.get("spieler", "Unbekannt"), d.get("spieler2", "Gegner") or "Gegner"
         pi_id = d.get("match_id", "-")
         
-        match = self.match_manager.get_aktuelles_match()
-        erw_s1, erw_s2 = match["spieler1"], match["spieler2"]
+        # --- FIX: NAMENS-CHECK FÜR BEIDE MODI (Turnier & Derby) ---
+        if self.match_manager.derby_modus and self.match_manager.phase == TurnierPhase.GRUPPENPHASE:
+            # Im Derby schauen wir ins Wartezimmer, falls Namen gesendet wurden!
+            erw_s1 = getattr(self.match_manager, 'derby_pending_p1', None) or s1 
+            erw_s2 = getattr(self.match_manager, 'derby_pending_p2', None) or s2
+        else:
+            # Im Turnier schauen wir auf den festen Spielplan
+            match = self.match_manager.get_aktuelles_match()
+            if match:
+                erw_s1, erw_s2 = match["spieler1"], match["spieler2"]
+            else:
+                erw_s1, erw_s2 = ("Unbekannt", "Unbekannt")
+            
         is_ko = (getattr(self.match_manager, "phase", None) in [TurnierPhase.KO_PHASE, TurnierPhase.BEENDET])
 
         # --- 1. GRUNDTEXT BAUEN (Je nach Szenario) ---
@@ -495,7 +511,7 @@ class TurnierGUI:
         # --- 2. WARNUNGEN PRÜFEN UND OBEN ANHÄNGEN ---
         warnungen = ""
 
-        # Check A: Namens-Abweichung
+        # Check A: Namens-Abweichung (Greift jetzt auch im Derby, wenn das Wartezimmer gefüllt war!)
         if s1 != erw_s1 or s2 != erw_s2:
             warnungen += f"⚠️ ACHTUNG: NAMENS-ABWEICHUNG! ⚠️\nErwartet: [{erw_s1}] vs [{erw_s2}]\n\n"
 
@@ -516,35 +532,35 @@ class TurnierGUI:
         if warnungen:
             msg = f"{warnungen}----------------------------------------\n\n{msg}"
             titel = "⚠️ WARNUNG: " + titel
-
-        return titel, msg         
+            
+        return titel, msg   
 
     def _fuehre_ergebnis_aktion_aus(self, szenario, d):
         b1, b2 = d.get("punkte_durchgang", 0), d.get("punkte_durchgang_pl2", 0)
         t1, t2 = d.get("gesamtpunkte", 0), d.get("gesamtpunkte_pl2", 0)
         pi_id = d.get("match_id", "-")
         prog_name = d.get("programm_name", "Unbekanntes Programm")
-        
-        # --- FIX: Komma entfernt und timestamp hinzugefügt ---
         start_z = d.get("start_zeit", "--:--") 
         timestamp_z = d.get("timestamp", "--:--")
+        
+        # --- NEU: Spieler auslesen für das dynamische Derby-Match ---
+        s_1 = d.get("spieler", "Unbekannt")
+        s_2 = d.get("spieler2", "Gegner") or "Gegner"
 
-        # 1. Den Manager die richtige Funktion ausführen lassen
         if szenario == "STECHEN_AKTIV":
             self.match_manager.trage_stechen_ein(b1, b2)
         elif szenario == "GLEICHSTAND":
             self.match_manager.aktiviere_stechen(b1, b2, t1, t2, pi_id)
-            self.match_zu_pi() # Den Pi nochmal antriggern 
+            self.match_zu_pi() 
         else:
-            # --- NEU: Den timestamp_z mit übergeben! ---
             self.match_manager.trage_ergebnis_ein(
                 b1, b2, t1, t2, pi_id, 
                 programm_name=prog_name, 
                 start_zeit=start_z, 
-                timestamp=timestamp_z
+                timestamp=timestamp_z,
+                s1=s_1, s2=s_2 # <--- NEU: Die Spielernamen mit übergeben!
             )
 
-        # 2. Zentrale Abschlussarbeiten erledigen
         self._abschluss_routine()
 
     def _abschluss_routine(self):
@@ -695,13 +711,27 @@ class TurnierGUI:
         is_ko = (self.match_manager.phase in [TurnierPhase.KO_PHASE, TurnierPhase.BEENDET])
         match = self.match_manager.get_aktuelles_match()
         
-        state = tk.DISABLED if (is_ko or not match) else tk.NORMAL
-        self.btn_send_pi_grp.config(state=state)
-        self.btn_get_pi_grp.config(state=state)
+        # --- FIX: Senden & Abholen sauber trennen! ---
+        if self.match_manager.derby_modus and not is_ko:
+            # Im Derby: Senden immer erlaubt (öffnet Popup), Skip deaktiviert
+            self.btn_send_pi_grp.config(state=tk.NORMAL)
+            self.btn_skip_grp.config(state=tk.DISABLED)
+        else:
+            # Normales Turnier: Nur erlaubt, wenn es ein nächstes Match gibt
+            self.btn_send_pi_grp.config(state=tk.DISABLED if (is_ko or not match) else tk.NORMAL)
+            self.btn_skip_grp.config(state=tk.DISABLED if (is_ko or not match) else tk.NORMAL)
         
-        if not is_ko and match: self.lbl_group_match.config(text=f"AKTUELL: Match {match['match_nr']} - {match['spieler1']} vs {match['spieler2']}")
-        elif is_ko: self.lbl_group_match.config(text="--- Gruppenphase beendet (Archiv) ---")
-
+        # Abholen ist in der gesamten Gruppenphase (auch im Derby!) IMMER erlaubt!
+        self.btn_get_pi_grp.config(state=tk.DISABLED if is_ko else tk.NORMAL)
+        
+        # --------------------------------------------
+        
+        if not is_ko and match: 
+            self.lbl_group_match.config(text=f"AKTUELL: Match {match['match_nr']} - {match['spieler1']} vs {match['spieler2']}")
+        elif self.match_manager.derby_modus and not is_ko:
+            self.lbl_group_match.config(text="--- Derby-Modus aktiv: Warte auf Ergebnisse vom Pi ---")
+        elif is_ko: 
+            self.lbl_group_match.config(text="--- Gruppenphase beendet (Archiv) ---")
         for item in self.tree_matches.get_children(): self.tree_matches.delete(item)
         for i, m in enumerate(self.match_manager.spielplan):
             
@@ -801,11 +831,108 @@ class TurnierGUI:
         if self.beamer_window and tk.Toplevel.winfo_exists(self.beamer_window): self.beamer_window.refresh_display()
 
     def match_zu_pi(self):
+        # --- NEU: Derby-Weiche ---
+        if getattr(self.match_manager, 'derby_modus', False):
+            self._oeffne_derby_send_dialog()
+            return
         match = self.match_manager.get_aktuelles_match()
         if match and self.datei_manager.schreibe_next_match(match['spieler1'], match['spieler2']):
             self.status_label.config(text=f"✅ Daten für {match['spieler1']} vs {match['spieler2']} gesendet!", foreground="green")
             # Nach 5 Sekunden wieder auf Standard setzen
             self.root.after(5000, lambda: self.status_label.config(text="Bereit", foreground="black"))
+
+    def _oeffne_derby_send_dialog(self):
+        """Öffnet ein komfortables Popup, um im Derby Spieler an den Pi zu senden."""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Derby: Nächstes Match")
+        dialog.geometry("500x400")
+        dialog.configure(bg="#2b2b2b")
+        
+        tk.Label(dialog, text="Wer geht an die Platte?", font=("Arial", 18, "bold"), bg="#2b2b2b", fg="white").pack(pady=(20, 20))
+        
+        bekannte_spieler = sorted(list(self.match_manager.ergebnisse.keys()))
+        
+        # ==========================================================
+        # --- DIE AUTO-SUGGEST KI (König & Herausforderer) ---
+        # ==========================================================
+        last_winner = ""
+        
+        # 1. Den King of the Hill ermitteln (Gewinner des letzten Matches)
+        if self.match_manager.spielplan:
+            letztes_match = self.match_manager.spielplan[-1]
+            if letztes_match.get("gespielt"):
+                t1 = letztes_match.get("total1", 0)
+                t2 = letztes_match.get("total2", 0)
+                # Bei exaktem Gleichstand darf Spieler 1 auf dem Thron bleiben
+                if t1 >= t2: last_winner = letztes_match.get("spieler1", "")
+                else: last_winner = letztes_match.get("spieler2", "")
+
+        # 2. Den Herausforderer ermitteln (Wenigste Spiele)
+        spieler_stats = self.match_manager.ergebnisse
+        # Sortiert die Namen nach der Anzahl der Spiele (aufsteigend)
+        sortierte_spieler = sorted(spieler_stats.keys(), key=lambda s: spieler_stats[s].get("spiele", 0))
+
+        kandidat_1 = last_winner
+        kandidat_2 = ""
+
+        # Wir suchen denjenigen mit den wenigsten Spielen, der NICHT der König ist!
+        for s in sortierte_spieler:
+            if s != last_winner:
+                kandidat_2 = s
+                break
+
+        # Fallback für das allererste Match am Abend (wenn last_winner noch leer ist)
+        if not kandidat_1 and len(sortierte_spieler) > 0:
+            kandidat_1 = sortierte_spieler[0]
+
+        # 3. Den Zufall entscheiden lassen, wer links und rechts steht!
+        vorschlaege = [kandidat_1, kandidat_2]
+        random.shuffle(vorschlaege)
+        # ==========================================================
+
+
+        # --- Spieler 1 ---
+        tk.Label(dialog, text="Spieler 1:", font=("Arial", 14), bg="#2b2b2b", fg="#aaaaaa").pack()
+        cb_p1 = ttk.Combobox(dialog, values=bekannte_spieler, font=("Arial", 16), width=20)
+        cb_p1.pack(pady=(0, 15))
+        if vorschlaege[0]: cb_p1.set(vorschlaege[0]) # <--- Auto-Suggest eintragen
+        
+        # --- Spieler 2 ---
+        tk.Label(dialog, text="Spieler 2:", font=("Arial", 14), bg="#2b2b2b", fg="#aaaaaa").pack()
+        cb_p2 = ttk.Combobox(dialog, values=bekannte_spieler, font=("Arial", 16), width=20)
+        cb_p2.pack(pady=(0, 25))
+        if vorschlaege[1]: cb_p2.set(vorschlaege[1]) # <--- Auto-Suggest eintragen
+        
+        def senden():
+            p1 = cb_p1.get().strip()
+            p2 = cb_p2.get().strip()
+            
+            if not p1 or not p2:
+                messagebox.showwarning("Halt!", "Bitte für beide Seiten einen Namen auswählen oder eintragen.", parent=dialog)
+                return
+                
+            erfolg = self.datei_manager.schreibe_next_match(p1, p2, 5, 30)
+            
+            if erfolg:
+                # --- NEU: Das Wartezimmer für den Beamer füllen! ---
+                self.match_manager.derby_pending_p1 = p1
+                self.match_manager.derby_pending_p2 = p2
+                
+                # Den Beamer sofort zwingen, sich neu zu zeichnen
+                if self.beamer_window and tk.Toplevel.winfo_exists(self.beamer_window):
+                    self.beamer_window.refresh_display()
+                # ----------------------------------------------------
+                dialog.destroy()
+            else:
+                messagebox.showerror("Fehler", "Netzwerkfehler: Konnte nicht an den Pi gesendet werden.", parent=dialog)
+
+        # Senden Button
+        btn = tk.Button(dialog, text="🚀 An Pi senden", font=("Arial", 16, "bold"), bg="#00ff00", fg="black", command=senden)
+        btn.pack(pady=10)
+        
+        # Fokus setzen
+        cb_p1.focus_set()
+
 
     def open_rename_dialog(self):
         sel = self.tree_overview.selection()
@@ -929,8 +1056,14 @@ class TurnierGUI:
                 # Wir lesen nur, wenn das Netzwerk eine Änderung meldet ODER wir noch nie gelesen haben
                 if current_mtime > self.last_mtime or self.last_raw_data == "":
                     
-                    with open(live_file, "r", encoding="utf-8") as f:
-                        raw_data = f.read()
+                    # --- NEU: ELA-Fehlertoleranz beim Einlesen! ---
+                    try:
+                        with open(live_file, "r", encoding="utf-8") as f:
+                            raw_data = f.read()
+                    except UnicodeDecodeError:
+                        # Fallback, falls der Pi die Datei in Latin-1 (Windows-Standard) gesendet hat
+                        with open(live_file, "r", encoding="latin-1") as f:
+                            raw_data = f.read()
 
                     # Hat sich inhaltlich was getan?
                     if raw_data != self.last_raw_data and raw_data.strip():
@@ -969,9 +1102,28 @@ class TurnierGUI:
                                     p2_treffer = ev.get("p2_pd", 0)
                                     p1_speed   = ev.get("p1_spd", 0.0)
                                     p2_speed   = ev.get("p2_spd", 0.0)
+                                    
+                            # ==============================================================
+                            # --- FIX: Namen auslesen! ---
+                            # Wir holen uns einfach die Namen aus dem allerletzten Event, 
+                            # das gerade in der Schleife verarbeitet wurde!
+                            # ==============================================================
+                            if timeline:
+                                last_ev = timeline[-1]
+                                p1_name = last_ev.get("p1_name", "Spieler 1")
+                                p2_name = last_ev.get("p2_name", "Spieler 2")
+                            else:
+                                p1_name, p2_name = "Spieler 1", "Spieler 2"
+
+                            # --------------------------------------------------------------
 
                             is_ko = getattr(self.match_manager, "phase", None) in [TurnierPhase.KO_PHASE, TurnierPhase.BEENDET]
-                            if is_ko and not self.match_manager.get_aktuelles_match().get("stechen_notwendig"):
+                            
+                            # --- FIX: Absicherung gegen leere Matches im Derby ---
+                            current_match = self.match_manager.get_aktuelles_match()
+                            stechen_laeuft = current_match.get("stechen_notwendig") if current_match else False
+                            
+                            if is_ko and not stechen_laeuft:
                                 p1_score = f"{(p1_treffer + p1_speed):.2f}"
                                 p2_score = f"{(p2_treffer + p2_speed):.2f}"
                             else:
@@ -983,7 +1135,8 @@ class TurnierGUI:
                                 self.beamer_window.update_live_score(
                                     p1_score, p2_score, current_status,
                                     p1_base=p1_treffer, p2_base=p2_treffer,
-                                    p1_total=(p1_treffer + p1_speed), p2_total=(p2_treffer + p2_speed)
+                                    p1_total=(p1_treffer + p1_speed), p2_total=(p2_treffer + p2_speed),
+                                    p1_name=p1_name, p2_name=p2_name # <--- FIX: Namen an den Beamer durchreichen!
                                 )
                                 
                         except json.JSONDecodeError:
