@@ -1149,7 +1149,7 @@ class TurnierGUI:
                 print(f"⚠️ [{zeit_jetzt}] Fehler in check_live_data: {e}")
 
         # Deine perfekte 333ms-Lösung:
-        self.root.after(333, self.check_live_data)
+        self.root.after(666, self.check_live_data)
 
 #NETZWERKFREIGABE:       
 #sudo nano /etc/samba/smb.conf  
