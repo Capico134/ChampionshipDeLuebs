@@ -69,7 +69,11 @@ class TurnierGUI:
         
         # --- ELA-CLEANUP: Alle Status- und Live-Variablen zentral deklarieren ---
         self.last_raw_data = ""           # Ersetzt das alte self.last_mtime
-        self.live_match_finished = False  
+        #self.live_match_finished = False  
+        # NEU: Unsere beiden neuen Status-Schalter für das flackerfreie Live-Polling!
+        self.match_is_live = False
+        self.zeige_ergebnis_screen = False     
+        self.debug_live_polling = False         # FÜR DEBUGGING!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         
         # --- Tkinter Kontroll-Variablen (Kein "Erfinden" mehr in den Sub-Routinen!) ---
         self.var_matches_per_page = tk.IntVar(value=20)
@@ -398,6 +402,7 @@ class TurnierGUI:
 
 
     # --- LOGIK ---
+    # --- LOGIK ---
     def turnier_starten(self):
         namen_text = self.name_input.get("1.0", tk.END).strip()
         namen = [n for n in namen_text.split("\n") if n.strip()]
@@ -409,10 +414,18 @@ class TurnierGUI:
 
         # --- NEU: Derby prüfen ---
         soll_derby_sein = self.derby_var.get()
+        soll_zufall_sein = self.zufall_var.get() # <--- ELA: Zustand der Zufalls-Checkbox holen
+        
         self.match_manager.derby_modus = soll_derby_sein
         
         if soll_derby_sein:
             # Im Derby ignorieren wir Teilnehmer-Regeln und bauen einen leeren Plan!
+            
+            # --- NEU: Zufallsmix auch im Derby! ---
+            if soll_zufall_sein:
+                import random
+                random.shuffle(namen)
+                
             gruppen = {"Derby": namen}
             plan = []
         else:
@@ -420,7 +433,6 @@ class TurnierGUI:
                 messagebox.showerror("Fehler", f"Aktuell {len(namen)} Teilnehmer.\nDie Teilnehmerzahl muss ein Vielfaches der Gruppengröße ({gruppen_groesse}) sein!")
                 return
                 
-            soll_zufall_sein = self.zufall_var.get()
             try:
                 gruppen, plan = generiere_spielplan(namen, gruppen_groesse, zufall=soll_zufall_sein)
             except ValueError as e:
@@ -434,6 +446,8 @@ class TurnierGUI:
         self.build_time_inputs()
         self.notebook.select(1)
         self._abschluss_routine()
+        
+        
     def start_ko_phase_gui(self):
         # 1. Smarte Warnung anhand der State-Machine
         if getattr(self.match_manager, "phase", None) == TurnierPhase.GRUPPENPHASE:
@@ -560,7 +574,7 @@ class TurnierGUI:
                 timestamp=timestamp_z,
                 s1=s_1, s2=s_2 # <--- NEU: Die Spielernamen mit übergeben!
             )
-
+        self.zeige_ergebnis_screen = False
         self._abschluss_routine()
 
     def _abschluss_routine(self):
@@ -831,10 +845,12 @@ class TurnierGUI:
         if self.beamer_window and tk.Toplevel.winfo_exists(self.beamer_window): self.beamer_window.refresh_display()
 
     def match_zu_pi(self):
-        # --- NEU: Derby-Weiche ---
-        if getattr(self.match_manager, 'derby_modus', False):
+        # --- NEU: Derby-Weiche (NUR in der Gruppenphase!) ---
+        if getattr(self.match_manager, 'derby_modus', False) and getattr(self.match_manager, 'phase', None) == TurnierPhase.GRUPPENPHASE:
             self._oeffne_derby_send_dialog()
             return
+            
+        # --- Der normale (strenge) Turnier-Ablauf für KO-Phase & Standard-Gruppen ---
         match = self.match_manager.get_aktuelles_match()
         if match and self.datei_manager.schreibe_next_match(match['spieler1'], match['spieler2']):
             self.status_label.config(text=f"✅ Daten für {match['spieler1']} vs {match['spieler2']} gesendet!", foreground="green")
@@ -848,7 +864,7 @@ class TurnierGUI:
         dialog.geometry("500x400")
         dialog.configure(bg="#2b2b2b")
         
-        tk.Label(dialog, text="Wer geht an die Platte?", font=("Arial", 18, "bold"), bg="#2b2b2b", fg="white").pack(pady=(20, 20))
+        tk.Label(dialog, text="Wer geht an den Schießstand?", font=("Arial", 18, "bold"), bg="#2b2b2b", fg="white").pack(pady=(20, 20))
         
         bekannte_spieler = sorted(list(self.match_manager.ergebnisse.keys()))
         
@@ -856,6 +872,7 @@ class TurnierGUI:
         # --- DIE AUTO-SUGGEST KI (König & Herausforderer) ---
         # ==========================================================
         last_winner = ""
+        last_winner_side = 0
         
         # 1. Den King of the Hill ermitteln (Gewinner des letzten Matches)
         if self.match_manager.spielplan:
@@ -863,33 +880,50 @@ class TurnierGUI:
             if letztes_match.get("gespielt"):
                 t1 = letztes_match.get("total1", 0)
                 t2 = letztes_match.get("total2", 0)
-                # Bei exaktem Gleichstand darf Spieler 1 auf dem Thron bleiben
-                if t1 >= t2: last_winner = letztes_match.get("spieler1", "")
-                else: last_winner = letztes_match.get("spieler2", "")
+                
+                # Wer hat gewonnen und auf welcher Seite stand er?
+                if t1 >= t2: 
+                    last_winner = letztes_match.get("spieler1", "")
+                    last_winner_side = 1
+                else: 
+                    last_winner = letztes_match.get("spieler2", "")
+                    last_winner_side = 2
 
-        # 2. Den Herausforderer ermitteln (Wenigste Spiele)
+        # 2. Spielerliste nach absolvierten Spielen sortieren
         spieler_stats = self.match_manager.ergebnisse
-        # Sortiert die Namen nach der Anzahl der Spiele (aufsteigend)
         sortierte_spieler = sorted(spieler_stats.keys(), key=lambda s: spieler_stats[s].get("spiele", 0))
 
-        kandidat_1 = last_winner
-        kandidat_2 = ""
+        # 3. Die Zuweisungs-Logik
+        if not last_winner:
+            # --- FALL A: ALLERERSTES MATCH AM ABEND ---
+            # Wir nehmen einfach die ersten beiden Spieler aus der Liste (falls vorhanden)
+            kandidat_1 = sortierte_spieler[0] if len(sortierte_spieler) > 0 else ""
+            kandidat_2 = sortierte_spieler[1] if len(sortierte_spieler) > 1 else ""
+            
+            # Position zufällig auswürfeln
+            import random
+            vorschlaege = [kandidat_1, kandidat_2]
+            random.shuffle(vorschlaege)
+            
+        else:
+            # --- FALL B: NORMALES DERBY-MATCH ---
+            kandidat_1 = last_winner
+            kandidat_2 = ""
 
-        # Wir suchen denjenigen mit den wenigsten Spielen, der NICHT der König ist!
-        for s in sortierte_spieler:
-            if s != last_winner:
-                kandidat_2 = s
-                break
+            # Denjenigen mit den wenigsten Spielen suchen, der NICHT der König ist!
+            for s in sortierte_spieler:
+                if s != last_winner:
+                    kandidat_2 = s
+                    break
 
-        # Fallback für das allererste Match am Abend (wenn last_winner noch leer ist)
-        if not kandidat_1 and len(sortierte_spieler) > 0:
-            kandidat_1 = sortierte_spieler[0]
-
-        # 3. Den Zufall entscheiden lassen, wer links und rechts steht!
-        vorschlaege = [kandidat_1, kandidat_2]
-        random.shuffle(vorschlaege)
+            # Zwanghafter Seitenwechsel für den King!
+            if last_winner_side == 1:
+                # King war links, muss jetzt nach rechts
+                vorschlaege = [kandidat_2, kandidat_1]
+            else:
+                # King war rechts, muss jetzt nach links
+                vorschlaege = [kandidat_1, kandidat_2]
         # ==========================================================
-
 
         # --- Spieler 1 ---
         tk.Label(dialog, text="Spieler 1:", font=("Arial", 14), bg="#2b2b2b", fg="#aaaaaa").pack()
@@ -914,14 +948,14 @@ class TurnierGUI:
             erfolg = self.datei_manager.schreibe_next_match(p1, p2, 5, 30)
             
             if erfolg:
-                # --- NEU: Das Wartezimmer für den Beamer füllen! ---
+                # --- Das Wartezimmer für den Beamer füllen! ---
                 self.match_manager.derby_pending_p1 = p1
                 self.match_manager.derby_pending_p2 = p2
                 
-                # Den Beamer sofort zwingen, sich neu zu zeichnen
+                # Den Beamer sofort zwingen, sich neu zu zeichnen (verhindert Wartezeiten)
                 if self.beamer_window and tk.Toplevel.winfo_exists(self.beamer_window):
                     self.beamer_window.refresh_display()
-                # ----------------------------------------------------
+                
                 dialog.destroy()
             else:
                 messagebox.showerror("Fehler", "Netzwerkfehler: Konnte nicht an den Pi gesendet werden.", parent=dialog)
@@ -1033,123 +1067,141 @@ class TurnierGUI:
         # Wir setzen BEIDES zurück, um das Caching auszutricksen
         self.last_mtime = 0
         self.last_raw_data = "" 
-        self.live_match_finished = False 
+        #self.live_match_finished = False 
         self.check_live_data()
 
     def check_live_data(self):
         live_file = self.datei_manager.live_ticker_path
         zeit_jetzt = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
         
-        # 1. GIBT ES DIE DATEI ÜBERHAUPT?
+        # 1. GIBT ES DIE DATEI?
         if not os.path.exists(live_file):
-            if self.beamer_window and tk.Toplevel.winfo_exists(self.beamer_window):
-                self.beamer_window.update_live_score(0, 0, "WARTEN")
-            # Cache leeren, wenn das Match vorbei ist
-            self.last_mtime = 0
-            self.last_raw_data = ""  
+            # WICHTIGER SCHUTZ: Nur auf "WARTEN" setzen, wenn kein Match läuft 
+            # UND wir nicht gerade absichtlich das Endergebnis anzeigen!
+            if not getattr(self, 'match_is_live', False) and not getattr(self, 'zeige_ergebnis_screen', False):
+                if self.beamer_window and tk.Toplevel.winfo_exists(self.beamer_window):
+                    self.beamer_window.update_live_score(0, 0, "WARTEN")
         else:
+            # 2. DATEI IST DA! Wir lesen sie sofort aus (SMB-Cache umgehen)
             try:
-                # 2. DER WAHRE CACHE-BUSTER!
-                # Das getmtime zwingt Windows, über das WLAN beim Pi den echten Status abzufragen!
-                current_mtime = os.path.getmtime(live_file)
-                
-                # Wir lesen nur, wenn das Netzwerk eine Änderung meldet ODER wir noch nie gelesen haben
-                if current_mtime > self.last_mtime or self.last_raw_data == "":
-                    
-                    # --- NEU: ELA-Fehlertoleranz beim Einlesen! ---
+                try:
+                    with open(live_file, "r", encoding="utf-8") as f:
+                        raw_data = f.read()
+                except PermissionError:
+                    # Pi schreibt exakt in dieser Millisekunde. Wir brechen ab und warten 333ms.
+                    self.root.after(333, self.check_live_data)
+                    return
+                except UnicodeDecodeError:
                     try:
-                        with open(live_file, "r", encoding="utf-8") as f:
-                            raw_data = f.read()
-                    except UnicodeDecodeError:
-                        # Fallback, falls der Pi die Datei in Latin-1 (Windows-Standard) gesendet hat
                         with open(live_file, "r", encoding="latin-1") as f:
                             raw_data = f.read()
+                    except PermissionError:
+                        self.root.after(333, self.check_live_data)
+                        return
 
-                    # Hat sich inhaltlich was getan?
-                    if raw_data != self.last_raw_data and raw_data.strip():
+                # 3. DATEI INHALTLICH VERARBEITEN
+                if raw_data.strip():
+                    try:
+                        data = json.loads(raw_data)
+                        timeline = data.get("timeline", []) if isinstance(data, dict) else data
                         
-                        # 3. DER SCHUTZSCHILD GEGEN HALBE DATEIEN (WLAN-Lags)
+                        p1_treffer, p2_treffer = 0, 0
+                        p1_speed, p2_speed = 0.0, 0.0
+                        current_status = ""
+                        ruhephasen = ["LADEN", "ACHTUNG", "SICHERHEIT", "RESET", "VORBEREITEN"]
+                        
+                        # Wir spulen das Match chronologisch ab
+                        for ev in timeline:
+                            current_status = ev.get("m", "")
+                            if current_status not in ruhephasen: 
+                                p1_treffer = ev.get("p1_pd", 0) + ev.get("p1_pz", 0)
+                                p2_treffer = ev.get("p2_pd", 0) + ev.get("p2_pz", 0)
+                                p1_speed   = ev.get("p1_spd", 0.0) + ev.get("p1_spz", 0.0)
+                                p2_speed   = ev.get("p2_spd", 0.0) + ev.get("p2_spz", 0.0)
+                            else:
+                                p1_treffer = ev.get("p1_pd", 0)
+                                p2_treffer = ev.get("p2_pd", 0)
+                                p1_speed   = ev.get("p1_spd", 0.0)
+                                p2_speed   = ev.get("p2_spd", 0.0)
+                                
+                        # Namen auslesen
+                        if timeline:
+                            last_ev = timeline[-1]
+                            p1_name = last_ev.get("p1_name", "Spieler 1")
+                            p2_name = last_ev.get("p2_name", "Spieler 2")
+                        else:
+                            p1_name, p2_name = "Spieler 1", "Spieler 2"
+
+                        # Status merken, damit wir wissen, ob wir löschen dürfen ohne zu flackern!
+                        if current_status == "SICHERHEIT":
+                            self.zeige_ergebnis_screen = True
+                            self.match_is_live = False
+                        else:
+                            # Auch "RESET" oder "VORBEREITEN" zählen noch als Live-Match!
+                            self.zeige_ergebnis_screen = False
+                            self.match_is_live = True
+
+                        # Punkte berechnen
+                        is_ko = getattr(self.match_manager, "phase", None) in [TurnierPhase.KO_PHASE, TurnierPhase.BEENDET]
+                        current_match = self.match_manager.get_aktuelles_match()
+                        stechen_laeuft = current_match.get("stechen_notwendig") if current_match else False
+                        
+                        if is_ko and not stechen_laeuft:
+                            p1_score = f"{(p1_treffer + p1_speed):.2f}"
+                            p2_score = f"{(p2_treffer + p2_speed):.2f}"
+                        else:
+                            p1_score = str(p1_treffer)
+                            p2_score = str(p2_treffer)
+                                
+                        # An den Beamer senden
+                        if self.beamer_window and tk.Toplevel.winfo_exists(self.beamer_window):
+                            self.beamer_window.update_live_score(
+                                p1_score, p2_score, current_status,
+                                p1_base=p1_treffer, p2_base=p2_treffer,
+                                p1_total=(p1_treffer + p1_speed), p2_total=(p2_treffer + p2_speed),
+                                p1_name=p1_name, p2_name=p2_name 
+                            )
+
+                        # ==============================================================
+                        # --- DEIN GENIALER HACK: DATEI SOFORT LÖSCHEN! ---
+                        # Wir haben die Daten verarbeitet. Weg damit!
+                        # So MUSS Windows beim nächsten Treffer die Datei frisch vom Pi holen!
+                        # ==============================================================
+
+                        # --- OPTIONAL: Debug-Kopie erstellen, bevor wir löschen ---
+                        if getattr(self, 'debug_live_polling', False):
+                            import shutil
+                            debug_dir = "debug_logs"
+                            if not os.path.exists(debug_dir):
+                                os.makedirs(debug_dir)
+                            
+                            # Eindeutigen Dateinamen mit Zeitstempel erzeugen
+                            # z.B. 2026-06-20_04-39-18_123_live.json
+                            timestamp_name = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S_%f")[:-3]
+                            debug_file_path = os.path.join(debug_dir, f"{timestamp_name}_live.json")
+                            
+                            try:
+                                # Wir kopieren den Inhalt des Strings (raw_data) direkt in die neue Datei,
+                                # anstatt shutil.copy zu nutzen. Das ist sicherer, falls Windows die 
+                                # Originaldatei gerade komisch behandelt.
+                                with open(debug_file_path, "w", encoding="utf-8") as debug_file:
+                                    debug_file.write(raw_data)
+                            except Exception as e:
+                                print(f"⚠️ Konnte Debug-Kopie nicht speichern: {e}")
+                        # -----------------------------------------------------------
                         try:
-                            # Wir versuchen ERST zu parsen...
-                            data = json.loads(raw_data)
+                            os.remove(live_file)
+                        except Exception:
+                            pass # Falls Windows die Datei gerade nicht loslässt, löschen wir sie beim nächsten Mal.
                             
-                            # ...und NUR wenn es nicht abgestürzt ist, merken wir uns den Text und die Zeit!
-                            # So vergiften wir uns niemals den Cache mit halben Dateien.
-                            self.last_raw_data = raw_data
-                            self.last_mtime = current_mtime
-                            
-                            # --- AB HIER DEINE SAUBERE PARSING-LOGIK ---
-                            timeline = data.get("timeline", []) if isinstance(data, dict) else data
-                            
-                            p1_treffer, p2_treffer = 0, 0
-                            p1_speed, p2_speed = 0.0, 0.0
-                            current_status = ""
-                            
-                            ruhephasen = ["LADEN", "ACHTUNG", "SICHERHEIT", "RESET", "VORBEREITEN"]
-                            
-                            # Wir spulen das Match chronologisch ab
-                            for ev in timeline:
-                                current_status = ev.get("m", "")
-                                
-                                if current_status not in ruhephasen: 
-                                    p1_treffer = ev.get("p1_pd", 0) + ev.get("p1_pz", 0)
-                                    p2_treffer = ev.get("p2_pd", 0) + ev.get("p2_pz", 0)
-                                    p1_speed   = ev.get("p1_spd", 0.0) + ev.get("p1_spz", 0.0)
-                                    p2_speed   = ev.get("p2_spd", 0.0) + ev.get("p2_spz", 0.0)
-                                else:
-                                    # Fallback für alle Ruhephasen (Laden, Achtung etc.)
-                                    p1_treffer = ev.get("p1_pd", 0)
-                                    p2_treffer = ev.get("p2_pd", 0)
-                                    p1_speed   = ev.get("p1_spd", 0.0)
-                                    p2_speed   = ev.get("p2_spd", 0.0)
-                                    
-                            # ==============================================================
-                            # --- FIX: Namen auslesen! ---
-                            # Wir holen uns einfach die Namen aus dem allerletzten Event, 
-                            # das gerade in der Schleife verarbeitet wurde!
-                            # ==============================================================
-                            if timeline:
-                                last_ev = timeline[-1]
-                                p1_name = last_ev.get("p1_name", "Spieler 1")
-                                p2_name = last_ev.get("p2_name", "Spieler 2")
-                            else:
-                                p1_name, p2_name = "Spieler 1", "Spieler 2"
-
-                            # --------------------------------------------------------------
-
-                            is_ko = getattr(self.match_manager, "phase", None) in [TurnierPhase.KO_PHASE, TurnierPhase.BEENDET]
-                            
-                            # --- FIX: Absicherung gegen leere Matches im Derby ---
-                            current_match = self.match_manager.get_aktuelles_match()
-                            stechen_laeuft = current_match.get("stechen_notwendig") if current_match else False
-                            
-                            if is_ko and not stechen_laeuft:
-                                p1_score = f"{(p1_treffer + p1_speed):.2f}"
-                                p2_score = f"{(p2_treffer + p2_speed):.2f}"
-                            else:
-                                p1_score = str(p1_treffer)
-                                p2_score = str(p2_treffer)
-                                    
-                            # Finalen Stand an den Beamer senden (mit Zusatzdaten)
-                            if self.beamer_window and tk.Toplevel.winfo_exists(self.beamer_window):
-                                self.beamer_window.update_live_score(
-                                    p1_score, p2_score, current_status,
-                                    p1_base=p1_treffer, p2_base=p2_treffer,
-                                    p1_total=(p1_treffer + p1_speed), p2_total=(p2_treffer + p2_speed),
-                                    p1_name=p1_name, p2_name=p2_name # <--- FIX: Namen an den Beamer durchreichen!
-                                )
-                                
-                        except json.JSONDecodeError:
-                            # 🚨 Das passiert, wenn wir über WLAN lesen, während der Pi noch schreibt!
-                            # Wir tun NICHTS. Beim nächsten Tick in 333ms ist der Pi fertig mit Schreiben
-                            # und wir lesen die komplette Datei sauber ein.
-                            pass
-                            
+                    except json.JSONDecodeError:
+                        pass # Datei war vom Pi noch nicht fertig geschrieben.
+                        
             except Exception as e:
                 print(f"⚠️ [{zeit_jetzt}] Fehler in check_live_data: {e}")
 
-        # Deine perfekte 333ms-Lösung:
-        self.root.after(666, self.check_live_data)
+        # Immer fleißig weiterticken!
+        self.root.after(333, self.check_live_data)
 
 #NETZWERKFREIGABE:       
 #sudo nano /etc/samba/smb.conf  
