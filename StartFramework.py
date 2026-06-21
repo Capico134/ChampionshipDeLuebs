@@ -7,13 +7,11 @@ import sys
 import configparser
 
 # =========================================================
-# 1. DPI-AWARENESS ERZWINGEN (Sehr wichtig für 4K+200%)
+# 1. DPI-AWARENESS ERZWINGEN
 # =========================================================
 if sys.platform == "win32":
-    try:
-        ctypes.windll.shcore.SetProcessDpiAwareness(1)
-    except Exception:
-        pass
+    try: ctypes.windll.shcore.SetProcessDpiAwareness(1)
+    except Exception: pass
 
 def get_screen_resolution():
     user32 = ctypes.windll.user32
@@ -30,7 +28,6 @@ import ctypes
 import pygetwindow as gw
 import os
 
-# DPI Awareness erzwingen
 if sys.platform == "win32":
     try: ctypes.windll.shcore.SetProcessDpiAwareness(1)
     except: pass
@@ -40,7 +37,6 @@ ini_path = sys.argv[2]
 target_script = sys.argv[3]
 sys.argv = [target_script] + sys.argv[4:] 
 
-# --- MONKEY PATCHING ERWEITERT ---
 OriginalTk = tk.Tk
 OriginalToplevel = tk.Toplevel
 OriginalPlace = tk.Widget.place
@@ -49,7 +45,6 @@ OriginalCanvasInit = tk.Canvas.__init__
 OriginalCanvasCreate = tk.Canvas._create
 
 def apply_window_logic(window):
-    """Hilfsfunktion, um Skalierung und Hotkeys auf JEDES Fenster anzuwenden."""
     window.is_borderless = False
     
     BASE_SCALE = 1.333333
@@ -57,12 +52,40 @@ def apply_window_logic(window):
     
     window.bind("<Alt-F12>", lambda e: toggle_border(window))
     window.bind("<Alt-F11>", lambda e: print_coords(window))
+    window.bind("<Alt-F8>", lambda e: save_layout_to_config(window))
     
-    # NEU: Der MEGA-CLOU Hotkey (Speichern in config.ini)
-    window.bind("<Alt-F8>", lambda e: save_layout_to_config())
-    
-    if scale_factor < 1.0:
-        set_borderless(window, True)
+    # NEU: Die intelligente Schleife, um den Rahmen aus der INI zu laden!
+    def apply_border_from_ini():
+        title = window.winfo_toplevel().title()
+        
+        # Wenn der Titel noch der Standard-Tk-Titel ist, warte weitere 200ms
+        if title.startswith("tk") or title == "":
+            window.after(200, apply_border_from_ini)
+            return
+            
+        targets = {'Shooting DeL': 'shooting', 'Championship': 'championship', 'LIVE': 'live', 'Anzeige': 'anzeige'}
+        key = None
+        for t, k in targets.items():
+            if t in title:
+                key = k
+                break
+                
+        if key and os.path.exists(ini_path):
+            with open(ini_path, 'r', encoding='utf-8') as f:
+                in_layout = False
+                for line in f:
+                    if line.strip() == "[Layout]": in_layout = True
+                    elif in_layout and line.strip().startswith("["): break
+                    elif in_layout and line.startswith(key):
+                        try:
+                            # Wir suchen nach dem 5. Wert (Index 4)
+                            parts = line.split('=', 1)[1].split(',')
+                            if len(parts) >= 5 and int(parts[4].strip()) == 0:
+                                set_borderless(window, True)
+                        except Exception: pass
+                        
+    # Starte die Schleife
+    window.after(200, apply_border_from_ini)
 
 def set_borderless(window, status):
     window.is_borderless = status
@@ -84,9 +107,10 @@ def print_coords(window):
     short_title = full_title[:12] if full_title else "Fenster"
     print(f"📍 Neuer Code: wait_and_position('{short_title}', {x}, {y}, {w}, {h}, scale_factor)")
 
-def save_layout_to_config():
-    """Liest alle Fenster aus und speichert sie als [Layout] in die config.ini"""
+def save_layout_to_config(current_window):
     print("\n💾 MEGA-CLOU: Starte Speichervorgang in config.ini...")
+    
+    current_title = current_window.winfo_toplevel().title()
     targets = {
         'Shooting DeL': 'shooting',
         'Championship': 'championship',
@@ -95,6 +119,37 @@ def save_layout_to_config():
         'DeLuebs_Master_Console': 'console'
     }
     
+    current_key = None
+    for t_part, k in targets.items():
+        if t_part in current_title:
+            current_key = k
+            break
+            
+    # Aktuellen Rahmen-Status ermitteln (0 = rahmenlos, 1 = Rahmen)
+    current_border_val = 0 if getattr(current_window, 'is_borderless', False) else 1
+    
+    # 1. Lese alte Rahmen-Zustände aus (damit wir Fenster, die wir nicht angetippt haben, nicht überschreiben)
+    old_borders = {}
+    lines = []
+    if os.path.exists(ini_path):
+        with open(ini_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+            
+    in_layout = False
+    for line in lines:
+        if line.strip() == "[Layout]":
+            in_layout = True
+        elif in_layout and line.strip().startswith("["):
+            break
+        elif in_layout and '=' in line:
+            try:
+                key, val = line.split('=', 1)
+                parts = [p.strip() for p in val.split(',')]
+                if len(parts) >= 5:
+                    old_borders[key.strip()] = int(parts[4])
+            except: pass
+
+    # 2. Neue Positionen und Rahmen generieren
     new_layout = ["[Layout]\n"]
     for title_part, key in targets.items():
         windows = gw.getWindowsWithTitle(title_part)
@@ -104,14 +159,17 @@ def save_layout_to_config():
             y = int(win.top / scale_factor)
             w = int(win.width / scale_factor)
             h = int(win.height / scale_factor)
-            new_layout.append(f"{key} = {x}, {y}, {w}, {h}\n")
+            
+            # Wenn es das Fenster ist, in dem wir Alt+F8 gedrückt haben -> nimm den neuen Status
+            # Sonst -> nimm den Status aus der alten config (oder 1 als Standard)
+            if key == current_key:
+                b_state = current_border_val
+            else:
+                b_state = old_borders.get(key, 1)
+                
+            new_layout.append(f"{key} = {x}, {y}, {w}, {h}, {b_state}\n")
     
-    # Behutsames Einlesen der Original-Datei (um Kommentare zu retten!)
-    lines = []
-    if os.path.exists(ini_path):
-        with open(ini_path, 'r', encoding='utf-8') as f:
-            lines = f.readlines()
-    
+    # 3. Datei zurückschreiben (Kommentare behalten)
     start_idx, end_idx = -1, -1
     for i, line in enumerate(lines):
         if line.strip() == "[Layout]":
@@ -133,7 +191,7 @@ def save_layout_to_config():
     with open(ini_path, 'w', encoding='utf-8') as f:
         f.writelines(lines)
         
-    print(f"✅ Layout erfolgreich gespeichert in: {ini_path}")
+    print(f"✅ Layout & Rahmen erfolgreich gespeichert!")
 
 class ScaledTk(OriginalTk):
     def __init__(self, *args, **kwargs):
@@ -203,8 +261,6 @@ runpy.run_path(target_script, run_name='__main__')
 # 3. LADE LOGIK FÜR CONFIG.INI
 # =========================================================
 def load_layout(ini_path):
-    """Liest die Fenster-Koordinaten aus der config.ini (Fallback auf Standardwerte)"""
-    # Dein bisheriges Standard-Layout:
     layout = {
         'shooting': [0, 0, 1920, 1080],
         'championship': [1920, 0, 1520, 700],
@@ -217,19 +273,17 @@ def load_layout(ini_path):
         config = configparser.ConfigParser()
         config.read(ini_path, encoding='utf-8')
         if config.has_section('Layout'):
-            print("📂 [Layout] Sektion in config.ini gefunden! Lade persönliche Positionen...")
             for key in layout.keys():
                 if config.has_option('Layout', key):
                     try:
                         val = config.get('Layout', key)
                         parts = [int(p.strip()) for p in val.split(',')]
-                        if len(parts) == 4:
-                            layout[key] = parts
+                        # Wir lesen nur die 4 Werte für die Geometrie. Der 5. Wert (Rahmen) 
+                        # wird vom Kind-Prozess selbst ausgelesen!
+                        if len(parts) >= 4:
+                            layout[key] = parts[:4] 
                     except Exception as e:
-                        print(f"⚠️ Fehler beim Parsen von '{key}': {e}")
-    else:
-        print("⚠️ config.ini noch nicht gefunden, nutze Standard-Layout.")
-        
+                        pass
     return layout
 
 # =========================================================
@@ -240,7 +294,7 @@ def start_scaled_app(cwd, script_name, scale_factor, ini_path, args=[]):
     with open(launcher_path, "w", encoding="utf-8") as f:
         f.write(LAUNCHER_CODE)
     
-    # NEU: ini_path wird an den Launcher mit übergeben!
+    # Komplexität reduziert: Kein force_borderless mehr!
     cmd = ["python", "_temp_launcher.py", str(scale_factor), ini_path, script_name] + args
     subprocess.Popen(cmd, cwd=cwd)
 
@@ -266,11 +320,10 @@ def wait_and_position(partial_title, target_x, target_y, target_width, target_he
                 win.restore()
                 win.moveTo(target_x, target_y)
                 win.resizeTo(target_width, target_height)
-                print(f"✅ '{partial_title}' in Position!")
+                print(f"✅ '{partial_title}' positioniert!")
                 return True
             except Exception as e:
-                print(f"⚠️ Fehler beim Verschieben von '{partial_title}': {e}")
-                return False
+                pass
         time.sleep(1)
     return False
 
@@ -284,53 +337,54 @@ def setup_studio():
     ini_path = os.path.join(base_path, "config.ini")
     shooting_path = os.path.abspath(os.path.join(base_path, "..", "ShootingDeLuebs"))    
     
-    # --- NEU: Manueller Skalierungs-Check ---
+    # --- CONFIG.INI AUSWERTUNG ---
     manual_scale = None
+    kiosk_mode = False 
+    
     if os.path.exists(ini_path):
         config = configparser.ConfigParser()
         config.read(ini_path, encoding='utf-8')
-        if config.has_option('Settings', 'manual_scale'):
-            try:
-                manual_scale = float(config.get('Settings', 'manual_scale'))
-                print(f"⚙️ Manueller Skalierungsfaktor aus config.ini: {manual_scale}")
-            except ValueError:
-                print("⚠️ Ungültiger Wert für manual_scale in config.ini - ignoriere.")
+        
+        if config.has_section('Settings'):
+            if config.has_option('Settings', 'manual_scale'):
+                try: manual_scale = float(config.get('Settings', 'manual_scale'))
+                except ValueError: pass
+                
+            if config.has_option('Settings', 'kiosk_mode'):
+                kiosk_mode = config.getboolean('Settings', 'kiosk_mode', fallback=False)
+
+    if kiosk_mode:
+        print("🛡️ KIOSK-MODUS AKTIV: Starte nur Championship.")
 
     if manual_scale is not None:
         scale_factor = manual_scale
+        print(f"⚙️ Manueller Skalierungsfaktor: {manual_scale}")
     else:
-        # Automatik-Modus (dein bisheriger Code)
         width, height = get_screen_resolution()
-        print(f"🖥️ Erfasste physikalische Auflösung: {width}x{height}")
-    
         basis_breite = 3440.0
-        if width >= 3840:
-            print("📺 4K Monitor erkannt. Nutze Original-Größe (1:1).")
-            scale_factor = 1.0
-        elif width >= 3400:
-            print("🚀 NASA-Cockpit erkannt. Nutze Original-Größe (1:1).")
+        if width >= 3400:
             scale_factor = 1.0
         else:
             scale_factor = width / basis_breite
-            print(f"🔬 Kleinerer Monitor erkannt. Skaliere auf {scale_factor * 100:.1f}%")
-  
-    # Programme starten
-    start_scaled_app(base_path, "MeisterschaftDeLuebs.py", scale_factor, ini_path, ["-beamer_autostart"]) #, "-topmost"])
-    if os.path.exists(shooting_path):
+
+    # --- PROGRAMME STARTEN ---
+    start_scaled_app(base_path, "MeisterschaftDeLuebs.py", scale_factor, ini_path, ["-beamer_autostart"]) 
+    
+    if not kiosk_mode and os.path.exists(shooting_path):
         start_scaled_app(shooting_path, "ShootingDeLuebs.py", scale_factor, ini_path)
     
-    # NEU: Layout aus config.ini laden
     layout = load_layout(ini_path)
     
-    # Fenster mit den geladenen Koordinaten anordnen!
-    wait_and_position('Shooting DeL', *layout['shooting'], scale_factor)
+    # --- FENSTER POSITIONIEREN ---
+    if not kiosk_mode:
+        wait_and_position('Shooting DeL', *layout['shooting'], scale_factor)
+        
     wait_and_position('Championship', *layout['championship'], scale_factor)
     wait_and_position('LIVE', *layout['live'], scale_factor)
     wait_and_position('Anzeige', *layout['anzeige'], scale_factor)
     wait_and_position('DeLuebs_Master_Console', *layout['console'], scale_factor)
 
     print("\n🎉 Studio-Layout aktiviert. Alles bereit!")
-    print("👉 HINWEIS: Drücke Alt+F8 in einem beliebigen App-Fenster, um das aktuelle Layout dauerhaft in der config.ini zu speichern!")
 
 if __name__ == "__main__":
     setup_studio()
