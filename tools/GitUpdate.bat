@@ -9,7 +9,7 @@ echo.
 cd ..\..\ShootingDeLuebs
 git fetch origin
 :: Zeigt die rot/grünen Änderungen an, bevor überschrieben wird
-git diff --stat --color HEAD origin/main
+git --no-pager diff --stat --color HEAD origin/main
 git reset --hard origin/main
 echo.
 echo ===========================================
@@ -19,7 +19,7 @@ echo.
 cd ..\ChampionshipDeLuebs
 git fetch origin
 :: Zeigt die rot/grünen Änderungen an, bevor überschrieben wird
-git diff --stat --color HEAD origin/main
+git --no-pager diff --stat --color HEAD origin/main
 git reset --hard origin/main
 echo.
 echo -------------------------------------------

@@ -54,7 +54,7 @@ class HtmlExporter:
         
         # 3. Absoluter Notfall-Fallback
         if not turnier_datum:
-            turnier_datum = datetime.datetime.now().strftime("%d.%m.%y")
+            turnier_datum = "-"#datetime.datetime.now().strftime("%d.%m.%y")
 
         # --- DYNAMISCHER DATEINAME ---
         # Wenn der Dateiname noch auf dem Standard "Turnierbericht.html" steht,
@@ -139,6 +139,66 @@ class HtmlExporter:
             <h1>🎯 Bericht 🎯</h1>
             <div class="turnier-datum">📅 Turniertag: {turnier_datum}</div>
         """
+
+
+        # --- NEU: SPIELER-FILTER (JS & DROPDOWN) ---
+        alle_spieler = sorted(list(ergebnisse.keys()))
+        options_html = "\n".join([f'<option value="{p}">{p}</option>' for p in alle_spieler])
+        
+        html += f"""
+        <div style="text-align: center; margin-bottom: 30px; background: #222; padding: 15px; border-radius: 8px; border: 1px solid #444; max-width: 800px; margin-left: auto; margin-right: auto;">
+            <label for="playerSelect" style="color: #00ff00; font-weight: bold; font-size: 1.1em;">🔍 Spieler-Fokus: </label>
+            <select id="playerSelect" onchange="highlightPlayer()" style="padding: 8px; background: #111; color: white; border: 1px solid #555; border-radius: 4px; font-size: 1.1em; margin-left: 10px; cursor: pointer;">
+                <option value="">-- Gesamte Ansicht --</option>
+                {options_html}
+            </select>
+        </div>
+
+        <script>
+        function highlightPlayer() {{
+            const sel = document.getElementById('playerSelect').value;
+            
+            // 1. Gruppentabellen hervorheben
+            document.querySelectorAll('.stand-row').forEach(row => {{
+                row.style.outline = 'none';
+                row.style.backgroundColor = row.dataset.origbg || '';
+                
+                if(sel && row.dataset.player === sel) {{
+                    if(!row.dataset.origbg) row.dataset.origbg = row.style.backgroundColor;
+                    row.style.outline = '2px solid #ffd700';
+                    row.style.backgroundColor = 'rgba(255, 215, 0, 0.15)';
+                }}
+            }});
+
+            // 2. Einzelne Matches (Namen & Punkte) hervorheben
+            document.querySelectorAll('.match-row').forEach(row => {{
+                row.querySelectorAll('.hl-target').forEach(el => {{
+                    el.style.color = el.dataset.origcol || '';
+                    el.style.textShadow = 'none';
+                }});
+                
+                if(!sel) return;
+
+                if(row.dataset.p1 === sel) {{
+                    row.querySelectorAll('.p1-hl').forEach(el => {{
+                        if(!el.dataset.origcol) el.dataset.origcol = el.style.color || 'inherit';
+                        el.style.color = '#ffd700';
+                        el.style.textShadow = '0 0 5px rgba(255, 215, 0, 0.5)';
+                    }});
+                }}
+                if(row.dataset.p2 === sel) {{
+                    row.querySelectorAll('.p2-hl').forEach(el => {{
+                        if(!el.dataset.origcol) el.dataset.origcol = el.style.color || 'inherit';
+                        el.style.color = '#ffd700';
+                        el.style.textShadow = '0 0 5px rgba(255, 215, 0, 0.5)';
+                    }});
+                }}
+            }});
+        }}
+        </script>
+        """
+
+
 
         # PROJEKT-HEADER
         html += """
@@ -248,7 +308,7 @@ class HtmlExporter:
                     rang_color = "#00ff00" if ist_qualifiziert else "inherit"
                     
                     html += f"""
-                        <tr style="{row_bg}">
+                        <tr class="stand-row" data-player="{s['n']}" style="{row_bg}">
                             <td style="color: {rang_color};">{rang_text}</td>
                             <td style="text-align: left;"><strong>{s['n']}</strong></td>
                             <td>{s.get('spiele', 0)}</td>
@@ -319,13 +379,17 @@ class HtmlExporter:
                         uhrzeit = ts.split(" ")[1][:5] if (ts and " " in ts) else "--:--"
 
                     b1, b2 = m.get('base1', 0), m.get('base2', 0)
-                    treffer = f"{b1} : {b2}"
-                    gesamt = f"{m.get('total1', 0):.2f} : {m.get('total2', 0):.2f}"
+                    
+                    # Werte in SPANs einpacken, damit JS sie links/rechts färben kann
+                    treffer = f"<span class='hl-target p1-hl'>{b1}</span> : <span class='hl-target p2-hl'>{b2}</span>"
+                    gesamt = f"<span class='hl-target p1-hl'>{m.get('total1', 0):.2f}</span> : <span class='hl-target p2-hl'>{m.get('total2', 0):.2f}</span>"
                     prog_name = m.get("programm_name", "-")
                     
-                    if b1 > b2: t_punkte = "3 : 0"
-                    elif b1 < b2: t_punkte = "0 : 3"
-                    else: t_punkte = "1 : 1"
+                    if b1 > b2: p1_tp, p2_tp = "3", "0"
+                    elif b1 < b2: p1_tp, p2_tp = "0", "3"
+                    else: p1_tp, p2_tp = "1", "1"
+                    t_punkte = f"<span class='hl-target p1-hl'>{p1_tp}</span> : <span class='hl-target p2-hl'>{p2_tp}</span>"
+                    
                 else:
                     uhrzeit = "--:--"
                     treffer = "- : -"
@@ -334,19 +398,19 @@ class HtmlExporter:
                     prog_name = "-"
 
                 html += f"""
-                    <tr{tr_style}>
+                    <tr class="match-row" data-p1="{m.get('spieler1', '')}" data-p2="{m.get('spieler2', '')}"{tr_style}>
                         <td style="color: #ffffff;">{m.get('match_nr', '-')}</td>
                         <td style="color: #888888; font-weight: 500;">{uhrzeit}</td>
                 """
                 
-                # --- NEU: Dynamischer Zellen-Inhalt ---
+                # --- Modus-abhängige Zelle ---
                 if is_derby:
                     html += f'        <td style="color: #ffffff;">{prog_name}</td>\n'
                 else:
                     html += f'        <td style="color: #ffffff;">{aktuelle_gruppe}</td>\n'
 
                 html += f"""
-                        <td style="text-align: left;"><strong>{m.get('spieler1', '')}</strong> vs. <strong>{m.get('spieler2', '')}</strong></td>
+                        <td style="text-align: left;"><strong><span class="hl-target p1-hl">{m.get('spieler1', '')}</span></strong> vs. <strong><span class="hl-target p2-hl">{m.get('spieler2', '')}</span></strong></td>
                         <td style="color: #00ff00; font-weight: bold;">{t_punkte}</td>
                         <td style="color: #ffffff; font-weight: bold;">{treffer}</td>
                         <td style="color: #ffd700;">{gesamt}</td>
@@ -380,25 +444,19 @@ class HtmlExporter:
                 match_nr = m.get('match_nr', '')
                 phase = datei_manager.get_match_name(match_nr) if datei_manager else match_nr
                 
-                paarung = f"<strong>{m.get('spieler1', '')}</strong> vs. <strong>{m.get('spieler2', '')}</strong>"
+                paarung = f"<strong><span class='hl-target p1-hl'>{m.get('spieler1', '')}</span></strong> vs. <strong><span class='hl-target p2-hl'>{m.get('spieler2', '')}</span></strong>"
                 
                 if m.get("gespielt"):
                     # 1. Versuch: Die neue, echte Startzeit ("23:47:51")
                     start_z = m.get("start_zeit", "")
                     if start_z:
-                        uhrzeit = start_z[:5] # Nimm einfach die ersten 5 Zeichen ("23:47")
+                        uhrzeit = start_z[:5] 
                     else:
-                        # 2. Fallback für alte Matches: Den Timestamp ("14.06.26 20:24:00") zerteilen
                         ts = m.get("timestamp", "")
                         uhrzeit = ts.split(" ")[1][:5] if (ts and " " in ts) else "--:--"
 
-                    treffer = f"{m.get('base1', 0)} : {m.get('base2', 0)}"
-                    gesamt = f"{m.get('total1', 0):.2f} : {m.get('total2', 0):.2f}"
-                    prog_name = m.get("programm_name", "-")
-                    
-                    if m.get("stechen_beendet"):
-                        stechen_str = f"{m.get('stechen_b1', 0)}:{m.get('stechen_b2', 0)}"
-                        gesamt += f"<br><small style='color: #ffd700;'>(ST: {stechen_str})</small>"
+                    treffer = f"<span class='hl-target p1-hl'>{m.get('base1', 0)}</span> : <span class='hl-target p2-hl'>{m.get('base2', 0)}</span>"
+                    gesamt = f"<span class='hl-target p1-hl'>{m.get('total1', 0):.2f}</span> : <span class='hl-target p2-hl'>{m.get('total2', 0):.2f}</span>"
                     
                     sieger = f"<span class='highlight-gold'>🏆 {m.get('winner', '')}</span>"
                 else:
@@ -409,7 +467,7 @@ class HtmlExporter:
                     prog_name = "-"
 
                 html += f"""
-                    <tr>
+                    <tr class="match-row" data-p1="{m.get('spieler1', '')}" data-p2="{m.get('spieler2', '')}">
                         <td style="color: #ffffff;">{phase}</td>
                         <td style="color: #888888; font-weight: 500;">{uhrzeit}</td>
                         <td style="color: #ffffff;">{prog_name}</td>
