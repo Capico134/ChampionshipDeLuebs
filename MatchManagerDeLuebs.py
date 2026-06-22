@@ -213,6 +213,25 @@ class MatchManager:
         if is_ko and round(t1, 2) == round(t2, 2): return "GLEICHSTAND"
         return "NORMAL"
 
+    def get_derby_king(self):
+        """Ermittelt zentral den King of the Hill (Sieger des letzten gespielten Matches)."""
+        
+        # --- NEU: In der K.O.-Phase verliert die Derby-Krone ihre Gültigkeit! ---
+        if self.phase in [TurnierPhase.KO_PHASE, TurnierPhase.BEENDET]:
+            return ""
+        # ------------------------------------------------------------------------
+
+        if getattr(self, 'derby_modus', False):
+            # Wir suchen das allerletzte Match, das bereits GESPIELT wurde
+            gespielte = [m for m in self.spielplan if m.get("gespielt")]
+            if gespielte:
+                letztes = gespielte[-1]
+                # Bei Gleichstand bleibt Spieler 1 auf dem Thron
+                if letztes.get("total1", 0) >= letztes.get("total2", 0):
+                    return letztes.get("spieler1", "")
+                else:
+                    return letztes.get("spieler2", "")
+        return ""
 
     def update_ko_tree(self, nr, winner, loser):
         """Verteilt Gewinner und Verlierer (für Platz 3) im Baum."""

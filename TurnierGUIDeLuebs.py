@@ -1071,13 +1071,12 @@ class TurnierGUI:
         self.check_live_data()
 
     def check_live_data(self):
+        delay = 666
         live_file = self.datei_manager.live_ticker_path
         zeit_jetzt = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
         
         # 1. GIBT ES DIE DATEI?
         if not os.path.exists(live_file):
-            # WICHTIGER SCHUTZ: Nur auf "WARTEN" setzen, wenn kein Match läuft 
-            # UND wir nicht gerade absichtlich das Endergebnis anzeigen!
             if not getattr(self, 'match_is_live', False) and not getattr(self, 'zeige_ergebnis_screen', False):
                 if self.beamer_window and tk.Toplevel.winfo_exists(self.beamer_window):
                     self.beamer_window.update_live_score(0, 0, "WARTEN")
@@ -1088,21 +1087,40 @@ class TurnierGUI:
                     with open(live_file, "r", encoding="utf-8") as f:
                         raw_data = f.read()
                 except PermissionError:
-                    # Pi schreibt exakt in dieser Millisekunde. Wir brechen ab und warten 333ms.
-                    self.root.after(333, self.check_live_data)
+                    self.root.after(delay, self.check_live_data)
                     return
                 except UnicodeDecodeError:
                     try:
                         with open(live_file, "r", encoding="latin-1") as f:
                             raw_data = f.read()
                     except PermissionError:
-                        self.root.after(333, self.check_live_data)
+                        self.root.after(delay, self.check_live_data)
                         return
 
                 # 3. DATEI INHALTLICH VERARBEITEN
                 if raw_data.strip():
+                    
+                    # ==============================================================
+                    # --- SCHUTZ 1: DIE DOPPEL-LESE-FALLE ---
+                    # ==============================================================
+                    if raw_data == getattr(self, 'last_raw_data', ""):
+                        # Wir kennen diese Daten schon! Windows blockiert das Löschen.
+                        # Wir updaten die GUI NICHT nochmal (verhindert Ruckeln!), 
+                        # sondern versuchen NUR, die Datei endlich loszuwerden.
+                        try:
+                            os.remove(live_file)
+                        except Exception:
+                            pass
+                        
+                        self.root.after(delay, self.check_live_data)
+                        return
+
                     try:
                         data = json.loads(raw_data)
+                        
+                        # --- ERFOLG! Wir merken uns die Daten für den Doppel-Lese-Schutz ---
+                        self.last_raw_data = raw_data 
+                        
                         timeline = data.get("timeline", []) if isinstance(data, dict) else data
                         
                         p1_treffer, p2_treffer = 0, 0
@@ -1110,7 +1128,6 @@ class TurnierGUI:
                         current_status = ""
                         ruhephasen = ["LADEN", "ACHTUNG", "SICHERHEIT", "RESET", "VORBEREITEN"]
                         
-                        # Wir spulen das Match chronologisch ab
                         for ev in timeline:
                             current_status = ev.get("m", "")
                             if current_status not in ruhephasen: 
@@ -1124,7 +1141,6 @@ class TurnierGUI:
                                 p1_speed   = ev.get("p1_spd", 0.0)
                                 p2_speed   = ev.get("p2_spd", 0.0)
                                 
-                        # Namen auslesen
                         if timeline:
                             last_ev = timeline[-1]
                             p1_name = last_ev.get("p1_name", "Spieler 1")
@@ -1132,16 +1148,13 @@ class TurnierGUI:
                         else:
                             p1_name, p2_name = "Spieler 1", "Spieler 2"
 
-                        # Status merken, damit wir wissen, ob wir löschen dürfen ohne zu flackern!
                         if current_status == "SICHERHEIT":
                             self.zeige_ergebnis_screen = True
                             self.match_is_live = False
                         else:
-                            # Auch "RESET" oder "VORBEREITEN" zählen noch als Live-Match!
                             self.zeige_ergebnis_screen = False
                             self.match_is_live = True
 
-                        # Punkte berechnen
                         is_ko = getattr(self.match_manager, "phase", None) in [TurnierPhase.KO_PHASE, TurnierPhase.BEENDET]
                         current_match = self.match_manager.get_aktuelles_match()
                         stechen_laeuft = current_match.get("stechen_notwendig") if current_match else False
@@ -1153,7 +1166,6 @@ class TurnierGUI:
                             p1_score = str(p1_treffer)
                             p2_score = str(p2_treffer)
                                 
-                        # An den Beamer senden
                         if self.beamer_window and tk.Toplevel.winfo_exists(self.beamer_window):
                             self.beamer_window.update_live_score(
                                 p1_score, p2_score, current_status,
@@ -1162,46 +1174,45 @@ class TurnierGUI:
                                 p1_name=p1_name, p2_name=p2_name 
                             )
 
-                        # ==============================================================
-                        # --- DEIN GENIALER HACK: DATEI SOFORT LÖSCHEN! ---
-                        # Wir haben die Daten verarbeitet. Weg damit!
-                        # So MUSS Windows beim nächsten Treffer die Datei frisch vom Pi holen!
-                        # ==============================================================
-
-                        # --- OPTIONAL: Debug-Kopie erstellen, bevor wir löschen ---
+                        # --- OPTIONAL: Debug-Kopie erstellen ---
                         if getattr(self, 'debug_live_polling', False):
                             import shutil
                             debug_dir = "debug_logs"
                             if not os.path.exists(debug_dir):
                                 os.makedirs(debug_dir)
-                            
-                            # Eindeutigen Dateinamen mit Zeitstempel erzeugen
-                            # z.B. 2026-06-20_04-39-18_123_live.json
                             timestamp_name = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S_%f")[:-3]
                             debug_file_path = os.path.join(debug_dir, f"{timestamp_name}_live.json")
-                            
                             try:
-                                # Wir kopieren den Inhalt des Strings (raw_data) direkt in die neue Datei,
-                                # anstatt shutil.copy zu nutzen. Das ist sicherer, falls Windows die 
-                                # Originaldatei gerade komisch behandelt.
                                 with open(debug_file_path, "w", encoding="utf-8") as debug_file:
                                     debug_file.write(raw_data)
                             except Exception as e:
                                 print(f"⚠️ Konnte Debug-Kopie nicht speichern: {e}")
-                        # -----------------------------------------------------------
+
+                        # --- DATEI LÖSCHEN ---
                         try:
                             os.remove(live_file)
                         except Exception:
-                            pass # Falls Windows die Datei gerade nicht loslässt, löschen wir sie beim nächsten Mal.
+                            pass 
                             
                     except json.JSONDecodeError:
-                        pass # Datei war vom Pi noch nicht fertig geschrieben.
+                        pass # Pi schreibt noch. Im nächsten Tick neu lesen.
+                    
+                    except Exception as e:
+                        # ==============================================================
+                        # --- SCHUTZ 2: DIE FEHLER-ENDLOSSCHLEIFE ---
+                        # ==============================================================
+                        print(f"⚠️ [{zeit_jetzt}] Logik-Fehler beim Verarbeiten der Live-Daten: {e}")
+                        # Die Datei ist kaputt. Wir löschen sie zwingend, um keine Endlosschleife zu riskieren!
+                        try:
+                            os.remove(live_file)
+                        except Exception:
+                            pass
                         
             except Exception as e:
-                print(f"⚠️ [{zeit_jetzt}] Fehler in check_live_data: {e}")
+                print(f"⚠️ [{zeit_jetzt}] Schwerer Dateizugriffs-Fehler in check_live_data: {e}")
 
         # Immer fleißig weiterticken!
-        self.root.after(333, self.check_live_data)
+        self.root.after(delay, self.check_live_data)
 
 #NETZWERKFREIGABE:       
 #sudo nano /etc/samba/smb.conf  

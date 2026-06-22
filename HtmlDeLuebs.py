@@ -203,10 +203,28 @@ class HtmlExporter:
             use_light_bg = not use_light_bg
             return f'<div class="section-block {cls}">'
         
+        # =================================================================
+        # --- NEU: SMARTE MODUS-ERKENNUNG FÜR DEN BERICHT ---
+        # =================================================================
+        # 1. Sind wir im Derby? (Wenn alle Spiele in der Gruppe "Derby" sind)
+        is_derby = bool(spielplan and all(m.get("gruppe") == "Derby" for m in spielplan))
+        
+        # 2. Was ist das Haupt-Programm? (Für normale Turniere)
+        haupt_programm = ""
+        if spielplan:
+            for m in spielplan:
+                if m.get("programm_name") and m.get("programm_name") != "-":
+                    haupt_programm = m.get("programm_name")
+                    break
+        # =================================================================
+        
         # 5. GRUPPENÜBERSICHT
         if mit_gruppenuebersicht:
             html += get_section_start()
-            html += "<h2>📊 Die Gruppenphase</h2>"
+            if is_derby:
+                html += "<h2>📊 Derby-Statistik</h2>"
+            else:
+                html += "<h2>📊 Die Gruppenphase</h2>"
             
             for gruppe in sorted(gruppen_daten.keys()):
                 html += f"""
@@ -249,14 +267,29 @@ class HtmlExporter:
         # 6. EINZELNE GRUPPENSPIELE
         if spielplan: 
             html += get_section_start()
-            html += "<h2>⚔️ Alle Gruppenspiele</h2>"
+            
+            # --- NEU: Dynamische Überschrift ---
+            if is_derby:
+                html += "<h2>⚔️ Alle Derby-Spiele</h2>"
+            else:
+                prog_zusatz = f" <span style='font-size: 1em; color: #ffffff; font-weight: normal;'>{haupt_programm}</span>" if haupt_programm else ""
+                html += f"<h2>⚔️ Alle Gruppenspiele{prog_zusatz}</h2>"
+                
             html += """
             <div class="table-container">
                 <table>
                     <tr style="border-bottom: 2px solid #00ff00;">
                         <th>Nr.</th>
                         <th>Zeit</th>
-                        <th>Grp</th>
+            """
+            
+            # --- NEU: Dynamische Spalte "Grp" vs "Programm" ---
+            if is_derby:
+                html += "            <th style='min-width: 160px;'>Programm</th>\n"
+            else:
+                html += "            <th>Grp</th>\n"
+                
+            html += """
                         <th style="text-align: left;">Paarung</th>
                         <th>Turnierpunkte</th>
                         <th>Treffer</th>
@@ -304,7 +337,15 @@ class HtmlExporter:
                     <tr{tr_style}>
                         <td style="color: #ffffff;">{m.get('match_nr', '-')}</td>
                         <td style="color: #888888; font-weight: 500;">{uhrzeit}</td>
-                        <td style="color: #ffffff;">{aktuelle_gruppe}</td>
+                """
+                
+                # --- NEU: Dynamischer Zellen-Inhalt ---
+                if is_derby:
+                    html += f'        <td style="color: #ffffff;">{prog_name}</td>\n'
+                else:
+                    html += f'        <td style="color: #ffffff;">{aktuelle_gruppe}</td>\n'
+
+                html += f"""
                         <td style="text-align: left;"><strong>{m.get('spieler1', '')}</strong> vs. <strong>{m.get('spieler2', '')}</strong></td>
                         <td style="color: #00ff00; font-weight: bold;">{t_punkte}</td>
                         <td style="color: #ffffff; font-weight: bold;">{treffer}</td>
@@ -318,7 +359,7 @@ class HtmlExporter:
             html += "</div>"
 
 
-        # 7. DIE K.O.-PHASE
+    # 7. DIE K.O.-PHASE
         if ko_spielplan: 
             html += get_section_start() 
             html += "<h2>🏆 Die K.O.-Phase</h2>"
@@ -328,6 +369,7 @@ class HtmlExporter:
                     <tr style="border-bottom: 2px solid #00ff00;">
                         <th>Phase</th>
                         <th>Zeit</th>
+                        <th>Programm</th>
                         <th style="text-align: left;">Paarung</th>
                         <th>Match-Wertung</th>
                         <th>Treffer</th>
@@ -370,6 +412,7 @@ class HtmlExporter:
                     <tr>
                         <td style="color: #ffffff;">{phase}</td>
                         <td style="color: #888888; font-weight: 500;">{uhrzeit}</td>
+                        <td style="color: #ffffff;">{prog_name}</td>
                         <td style="text-align: left;">{paarung}</td>
                         <td style="color: #00ff00; font-weight: bold;">{gesamt}</td>
                         <td style="color: #ffffff;">{treffer}</td>
@@ -381,7 +424,6 @@ class HtmlExporter:
             </div>
             """
             html += "</div>"
-
 
 
         # 8. SONDERWERTUNGEN

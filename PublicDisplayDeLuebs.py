@@ -265,9 +265,14 @@ class PublicDisplay(tk.Toplevel):
                 self.match_frame = tk.Frame(self.match_container, bg="#1a1a1a")
                 self.match_frame.pack(side="left", anchor="nw")
 
-                # Namen auf 14 kürzen für maximalen Platzgewinn
-                p1_name_trunc = truncate_text(match['spieler1'], 14)
-                p2_name_trunc = truncate_text(match['spieler2'], 14)
+                # --- KING-KRONE EINFÜGEN ---
+                king = self.match_manager.get_derby_king() 
+                p1_display = f"{match['spieler1']} 👑" if match['spieler1'] == king else match['spieler1']
+                p2_display = f"{match['spieler2']} 👑" if match['spieler2'] == king else match['spieler2']
+
+                # Namen auf 16 (statt 14) kürzen, damit die Krone Platz hat
+                p1_name_trunc = truncate_text(p1_display, 16)
+                p2_name_trunc = truncate_text(p2_display, 16)
 
                 self.lbl_p1_name = tk.Label(self.match_frame, text=p1_name_trunc, font=("Arial", 40, "bold"), bg="#1a1a1a", fg="white")
                 self.lbl_p1_name.grid(row=0, column=0, sticky="w", padx=(0, 20))
@@ -321,7 +326,10 @@ class PublicDisplay(tk.Toplevel):
                 
                 self.lbl_next.config(text=f"NEXT: {n_phase}\n{p1_kurz} vs. {p2_kurz}")
             else:
-                self.lbl_next.config(text="ALS NÄCHSTES: ---")
+                if getattr(self.match_manager, 'derby_modus', False):
+                    self.lbl_next.config(text="") # Im Derby bleibt es elegant leer!
+                else:
+                    self.lbl_next.config(text="ALS NÄCHSTES: ---")
 
         # --- FIX: BEI JEDEM REFRESH PLAYLIST ZWINGEND NEU BAUEN UND INDEX SCHÜTZEN ---
         self.build_playlist()
@@ -569,22 +577,10 @@ class PublicDisplay(tk.Toplevel):
         gruppen_beendet = (akt_match is None and getattr(self.match_manager, 'phase', TurnierPhase.NICHT_GESTARTET) == TurnierPhase.GRUPPEN_ABGESCHLOSSEN)
 
         # ==========================================================
-        # --- NEU: King of the Hill für das Derby ermitteln ---
+        # --- ZENTRALE KING-ABFRAGE ---
         # ==========================================================
-        derby_king = ""
         is_derby = getattr(self.match_manager, 'derby_modus', False)
-        
-        if is_derby:
-            # Wir suchen das allerletzte Match, das bereits GESPIELT wurde
-            gespielte = [m for m in self.match_manager.spielplan if m.get("gespielt")]
-            if gespielte:
-                letztes = gespielte[-1]
-                # Bei Gleichstand bleibt Spieler 1 auf dem Thron
-                if letztes.get("total1", 0) >= letztes.get("total2", 0):
-                    derby_king = letztes.get("spieler1", "")
-                else:
-                    derby_king = letztes.get("spieler2", "")
-        # ==========================================================
+        derby_king = self.match_manager.get_derby_king()
 
         for g in page_gruppen_keys:
             # --- ELA: Info-Text auslesen und dynamisch formatieren ---
@@ -737,11 +733,15 @@ class PublicDisplay(tk.Toplevel):
         """Aktualisiert die Live-Punkte, den Status und optional die Namen auf dem Beamer."""
         
         # --- NEU: Spielernamen live vom Pi übernehmen (Wichtig für Derby!) ---
+        king = self.match_manager.get_derby_king() # <--- ZENTRALER AUFRUF
+        
         if p1_name and hasattr(self, 'lbl_p1_name') and self.lbl_p1_name.winfo_exists():
-            self.lbl_p1_name.config(text=truncate_text(p1_name, 14))
+            p1_display = f"{p1_name} 👑" if p1_name == king else p1_name
+            self.lbl_p1_name.config(text=truncate_text(p1_display, 16))
             
         if p2_name and hasattr(self, 'lbl_p2_name') and self.lbl_p2_name.winfo_exists():
-            self.lbl_p2_name.config(text=truncate_text(p2_name, 14))
+            p2_display = f"{p2_name} 👑" if p2_name == king else p2_name
+            self.lbl_p2_name.config(text=truncate_text(p2_display, 16))
             
         # 1. Punktestand immer aktualisieren
         if p1_points is not None:

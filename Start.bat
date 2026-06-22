@@ -6,15 +6,15 @@ set "PROGRAM=MeisterschaftDeLuebs.py"
 
 :: 2. Prüfen, ob config.ini existiert
 if exist config.ini (
-    :: Finde Zeilen mit "StartFramework", die NICHT mit # oder ; anfangen
-    for /f "tokens=1,2 delims==" %%A in ('findstr /i "^[ \t]*[^#;].*StartFramework" config.ini') do (
+    :: Finde Zeilen, die EXAKT mit "StartFramework" beginnen (keine Leerzeichen davor!)
+    for /f "tokens=1,2 delims==" %%A in ('findstr /i "^StartFramework" config.ini') do (
         
         :: Den Wert auf der rechten Seite nehmen und alle Leerzeichen entfernen
         set "VALUE=%%B"
         set "VALUE=!VALUE: =!"
         
-        :: Prüfen, ob der Wert "True" ist
-        if /i "!VALUE!"=="True" (
+        :: Prüfen, ob die ERSTEN 4 BUCHSTABEN "True" sind (das ignoriert unsichtbare Zeilenumbrüche!)
+        if /i "!VALUE:~0,4!"=="True" (
             set "PROGRAM=StartFramework.py"
         )
     )
