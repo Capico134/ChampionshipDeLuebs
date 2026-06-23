@@ -112,17 +112,17 @@ class HtmlExporter:
                 
                 h2 {{ color: #00ff00; border-bottom: 2px solid #333; padding-bottom: 8px; margin-top: 30px; }}
                 h3 {{ color: #ffffff; background-color: #333; padding: 10px; margin-bottom: 0; border-top-left-radius: 5px; border-top-right-radius: 5px; }}
-                .table-container {{ max-width: 800px; margin: 0 auto 30px auto; overflow-x: auto; }}
+                .table-container {{ max-width: 1000px; margin: 0 auto 30px auto; overflow-x: auto; }}
                 table {{ width: 100%; border-collapse: collapse; background-color: #222; }}
                 th, td {{ border: 1px solid #444; padding: 10px; text-align: center; }}
                 th {{ background-color: #2a2a2a; color: #00ff00; font-weight: bold; }}
                 tr:nth-child(even) {{ background-color: #262626; }}
                 .highlight-gold {{ color: #ffd700; font-weight: normal; }}
-                .award-box {{ background-color: #222; max-width: 760px; margin: 20px auto; padding: 15px; border-left: 6px solid #ffcc00; }}
+                .award-box {{ background-color: #222; max-width: 960px; margin: 20px auto; padding: 15px; border-left: 6px solid #ffcc00; }}
                 .award-title {{ color: #ffcc00; margin-top: 0; font-size: 1.3em; }}
                 
                 /* Podium Styles */
-                .podium-container {{ display: flex; justify-content: center; align-items: flex-end; max-width: 800px; margin: 30px auto 70px auto; height: 180px; gap: 10px; }}
+                .podium-container {{ display: flex; justify-content: center; align-items: flex-end; max-width: 1000px; margin: 30px auto 70px auto; height: 180px; gap: 10px; }}
                 .podium-step {{ display: flex; flex-direction: column; align-items: center; justify-content: flex-end; width: 30%; color: #000; text-align: center; padding-bottom: 10px; border-top-left-radius: 8px; border-top-right-radius: 8px; box-shadow: 0 -4px 10px rgba(0,0,0,0.5); }}
                 .podium-name {{ font-weight: bold; font-size: 0.95em; margin-bottom: -130px; background-color: rgba(0,0,0,0.8); color: white; padding: 4px 10px; border-radius: 4px; border: 2px solid white; }}
                 .step-1 {{ background: linear-gradient(to bottom, #FFD700, #B8860B); height: 160px; z-index: 3; }}
@@ -175,6 +175,7 @@ class HtmlExporter:
                 row.querySelectorAll('.hl-target').forEach(el => {{
                     el.style.color = el.dataset.origcol || '';
                     el.style.textShadow = 'none';
+                    el.style.backgroundColor = 'transparent';
                 }});
                 
                 if(!sel) return;
@@ -182,15 +183,21 @@ class HtmlExporter:
                 if(row.dataset.p1 === sel) {{
                     row.querySelectorAll('.p1-hl').forEach(el => {{
                         if(!el.dataset.origcol) el.dataset.origcol = el.style.color || 'inherit';
-                        el.style.color = '#ffd700';
-                        el.style.textShadow = '0 0 5px rgba(255, 215, 0, 0.5)';
+                        el.style.color = '#000000'; // Text wird schwarz
+                        el.style.backgroundColor = '#ffd700'; // Hintergrund wird gold
+                        el.style.padding = '1px 5px'; // Ein bisschen Luft links und rechts
+                        el.style.borderRadius = '4px'; // Abgerundete Ecken
+                        el.style.textShadow = 'none'; // Schatten komplett aus
                     }});
                 }}
                 if(row.dataset.p2 === sel) {{
                     row.querySelectorAll('.p2-hl').forEach(el => {{
                         if(!el.dataset.origcol) el.dataset.origcol = el.style.color || 'inherit';
-                        el.style.color = '#ffd700';
-                        el.style.textShadow = '0 0 5px rgba(255, 215, 0, 0.5)';
+                        el.style.color = '#000000'; // Text wird schwarz
+                        el.style.backgroundColor = '#ffd700'; // Hintergrund wird gold
+                        el.style.padding = '1px 5px'; // Ein bisschen Luft links und rechts
+                        el.style.borderRadius = '4px'; // Abgerundete Ecken
+                        el.style.textShadow = 'none'; // Schatten komplett aus     
                     }});
                 }}
             }});
@@ -345,15 +352,15 @@ class HtmlExporter:
             
             # --- NEU: Dynamische Spalte "Grp" vs "Programm" ---
             if is_derby:
-                html += "            <th style='min-width: 160px;'>Programm</th>\n"
+                html += "            <th style='min-width: 110px;'>Programm</th>\n"
             else:
                 html += "            <th>Grp</th>\n"
                 
             html += """
                         <th style="text-align: left;">Paarung</th>
                         <th>Turnierpunkte</th>
-                        <th>Treffer</th>
-                        <th>Match-Wertung</th>
+                        <th style='min-width: 70px;'>Treffer</th>
+                        <th style='min-width: 95px;'>Match-Wertung</th>
                         </tr>
             """
             letzte_gruppe = None

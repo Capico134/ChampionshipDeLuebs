@@ -28,7 +28,7 @@ Wenn du in deiner `config.ini` den Wert `StartFramework = True` setzt, aktiviert
 
 ## 🛠️ Nützliche Helfer-Skripte (im `tools/`-Ordner)
 * **`Auto_Minimizer.py`:** Ein kleines Hintergrund-Tool, das Turnierexporte überwacht, bei Abschluss blitzschnell das Hauptfenster für einfaches Teilen (z.B. per E-Mail) minimiert und es per `ESC` sofort wieder in den Fokus holt.
-* **`ZZ_GitUpdate.bat`:** Sorgt für automatische, reibungslose Updates direkt aus dem GitHub-Repository.
+* **`GitUpdate.bat`:** Sorgt für automatische, reibungslose Updates direkt aus dem GitHub-Repository.
 
 ## 🔗 System-Verbund & Hardware
 Dieses Programm arbeitet Hand in Hand mit [Shooting DeLübs](https://github.com/Capico134/ShootingDeLuebs) (Die Treffer-Erfassung & Hardware-Steuerung).

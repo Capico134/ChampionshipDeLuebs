@@ -108,8 +108,8 @@ class DateiManager:
         if not os.path.exists("savegames"):
             os.makedirs("savegames")
             
-        zeitpunkt = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        dateiname = f"savegames/turnier_{zeitpunkt}.json"
+        zeitpunkt = datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S")
+        dateiname = f"savegames/Turnier_{zeitpunkt}.json"
         
         try:
             with open(dateiname, 'w', encoding='utf-8') as f:
