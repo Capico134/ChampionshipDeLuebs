@@ -11,6 +11,7 @@ echo Warte auf Raspberry Pi (WLAN/Netzwerk)...
 :LOOP
 ping -n 1 192.168.4.1 >nul
 if errorlevel 1 (
+    echo Waiting for connection
     timeout /t 2 >nul
     goto LOOP
 )
