@@ -25,6 +25,7 @@ def get_current_version():
 def main():
     root = tk.Tk()
     aktuelle_version = get_current_version()
+    print(f"🏆 Championship DeLübs [v{aktuelle_version}]")
 
     soll_beamer_starten = "-beamer_autostart" in sys.argv 
     soll_topmost = "-topmost" in sys.argv

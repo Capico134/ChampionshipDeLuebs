@@ -477,7 +477,7 @@ class PublicDisplay(tk.Toplevel):
         # --- HEADER ---
         h_frame = tk.Frame(self.table_container, bg="#444"); h_frame.pack(fill="x")
         
-        header_font = ("Arial", 12)
+        header_font = ("Arial", 13, "bold")
         header_fg = "#cccccc" 
         
         # --- ELA: Wieder sauber in "Nr." und "Grp" getrennt ---
@@ -485,7 +485,7 @@ class PublicDisplay(tk.Toplevel):
         tk.Label(h_frame, text="Grp", font=header_font, bg="#444", fg=header_fg, width=4, anchor="center").pack(side="left")
         # --------------------------------------------------------
         
-        tk.Label(h_frame, text="Paarung", font=header_font, bg="#444", fg=header_fg, width=24, anchor="w").pack(side="left", padx=5)
+        tk.Label(h_frame, text="Paarung", font=("Arial", 12), bg="#444", fg=header_fg, width=24, anchor="w").pack(side="left", padx=5)
         tk.Label(h_frame, text="Trf", font=header_font, bg="#444", fg=header_fg, width=8, anchor="center").pack(side="left")
         tk.Label(h_frame, text="Match-Wertung", font=header_font, bg="#444", fg=header_fg, width=14, anchor="center").pack(side="left")
         tk.Label(h_frame, text="Pkt", font=header_font, bg="#444", fg=header_fg, width=4, anchor="center").pack(side="left")
@@ -534,17 +534,18 @@ class PublicDisplay(tk.Toplevel):
             else: 
                 treffer, wertung, p_text = "-:-", "-:-", "-:-"
 
-            data_font = ("Arial", 12)
+            data_font = ("Arial", 13, "bold")
             
             # --- ELA: Jetzt getrennte Labels für Nummer und Gruppe ---
             tk.Label(f, text=str(m['match_nr']), font=data_font, bg=bg_color, fg=fg_color, width=4, anchor="center").pack(side="left")
             tk.Label(f, text=m.get('gruppe', ''), font=data_font, bg=bg_color, fg=fg_color, width=4, anchor="center").pack(side="left")
             # ---------------------------------------------------------
             
-            tk.Label(f, text=paarung, font=("Arial", 12, "bold" if is_active else "normal"), bg=bg_color, fg=fg_color, width=24, anchor="w").pack(side="left", padx=5)
-            tk.Label(f, text=treffer, font=data_font, bg=bg_color, fg="#ffd700", width=8, anchor="center").pack(side="left")
-            tk.Label(f, text=wertung, font=data_font, bg=bg_color, fg="#aaa", width=14, anchor="center").pack(side="left")
-            tk.Label(f, text=p_text, font=data_font, bg=bg_color, fg="#00ff00", width=4, anchor="center").pack(side="left")
+            #tk.Label(f, text=paarung, font=("Arial", 12, "bold" if is_active else "normal"), bg=bg_color, fg=fg_color, width=24, anchor="w").pack(side="left", padx=5)
+            tk.Label(f, text=paarung, font=("Arial", 12), bg=bg_color, fg=fg_color, width=24, anchor="w").pack(side="left", padx=5)
+            tk.Label(f, text=treffer, font=data_font, bg=bg_color, fg="#00ff00", width=8, anchor="center").pack(side="left")#"#ffd700"
+            tk.Label(f, text=wertung, font=data_font, bg=bg_color, fg="white", width=14, anchor="center").pack(side="left")#"#aaa"
+            tk.Label(f, text=p_text, font=data_font, bg=bg_color, fg="#ffd700", width=4, anchor="center").pack(side="left") #"#00ff00"
             
     def update_tables(self, page=0, page_info=""):
         
@@ -621,10 +622,11 @@ class PublicDisplay(tk.Toplevel):
                 # --- NEU: DEN KING KRÖNEN! ---
                 # ==========================================================
                 anzeige_name = s['name']
-                name_font_weight = "bold" if is_qualified else "normal"
+                #name_font_weight = "bold" if is_qualified else "normal"
+                name_font_weight = "normal"
                 
                 if is_derby and anzeige_name == derby_king:
-                    anzeige_name = f"👑 {anzeige_name}"
+                    anzeige_name = f"{anzeige_name} 👑"
                     name_fg = "#ffd700"  # Leuchtendes Gold!
                     #name_font_weight = "bold"
                 # ==========================================================
@@ -639,7 +641,7 @@ class PublicDisplay(tk.Toplevel):
                 
                 tk.Label(f, text=s['spiele'], font=("Arial", 14), bg=bg, fg="white", width=3, anchor="center").pack(side="left")
                 tk.Label(f, text=s['punkte'], font=("Arial", 14, "bold"), bg=bg, fg="#00ff00", width=4, anchor="center").pack(side="left")
-                tk.Label(f, text=f"{s['differenz']:+.2f}", font=("Arial", 14), bg=bg, fg="#aaa", width=8, anchor="center").pack(side="left")
+                tk.Label(f, text=f"{s['differenz']:+.2f}", font=("Arial", 14), bg=bg, fg="white", width=8, anchor="center").pack(side="left")#"#aaa"
                 tk.Label(f, text=f"{s.get('score_erzielt', 0):.2f}", font=("Arial", 14, "bold"), bg=bg, fg="#ffd700", width=8, anchor="center").pack(side="left")
 
     def update_ko_bracket(self, page=0, page_info=""):
@@ -673,14 +675,15 @@ class PublicDisplay(tk.Toplevel):
             f = tk.Frame(self.table_container, bg=bg); f.pack(fill="x", pady=1)
             
             # 1. Runde (Breite auf 5 angepasst)
-            tk.Label(f, text=str(m['match_nr']), font=("Arial", 14), bg=bg, fg="#aaa", width=3, anchor="w").pack(side="left", padx=10)
+            tk.Label(f, text=str(m['match_nr']), font=("Arial", 14), bg=bg, fg="white", width=3, anchor="w").pack(side="left", padx=10)#"#aaa"
             
             # 2. Paarung (Gekürzt auf max 26 Zeichen)
             paarung_text = f"{m['spieler1']} vs. {m['spieler2']}"
             # WICHTIG: Die Zahl hier bestimmt, ab wann die ... erscheinen
             paarung_text_kurz = truncate_text(paarung_text, 28) 
             
-            tk.Label(f, text=paarung_text_kurz, font=("Arial", 14, "bold" if is_active else "normal"), bg=bg, fg="#00ff00" if is_active else "white", width=23, anchor="w").pack(side="left")
+            #tk.Label(f, text=paarung_text_kurz, font=("Arial", 14, "bold" if is_active else "normal"), bg=bg, fg="#00ff00" if is_active else "white", width=23, anchor="w").pack(side="left")
+            tk.Label(f, text=paarung_text_kurz, font=("Arial", 14, "normal"), bg=bg, fg="#00ff00" if is_active else "white", width=23, anchor="w").pack(side="left")
             
             # 3. Wertung (Die Logik erweitern!)
             if m.get("gespielt"):
@@ -698,7 +701,7 @@ class PublicDisplay(tk.Toplevel):
                 wertung_display = "-:-"
             
             # Label etwas höher machen, damit der Zeilenumbruch Platz hat
-            tk.Label(f, text=wertung_display, font=("Arial", 12), bg=bg, fg="#aaa", width=9, height=2, anchor="center").pack(side="left")
+            tk.Label(f, text=wertung_display, font=("Arial", 12), bg=bg, fg="white", width=9, height=2, anchor="center").pack(side="left")#"#aaa" 
             
             # 4. Sieger
             winner_name = m.get("winner")

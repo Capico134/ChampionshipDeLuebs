@@ -46,7 +46,7 @@ if __name__ == "__main__":
     
     # Pfad zum savegames Ordner (robust relativ zur Python-Datei berechnet)
     base_path = os.path.dirname(os.path.abspath(__file__))
-    savegames_pfad = os.path.join(base_path, "savegames")
+    savegames_pfad = os.path.join(base_path, "..\savegames")
     
     # Wächter starten
     if os.path.exists(savegames_pfad):
