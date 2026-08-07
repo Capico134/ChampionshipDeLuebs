@@ -30,6 +30,29 @@ if exist "..\ShootingDeLuebs\" (
 echo.
 
 echo ===========================================
+echo   TargetVision DeLuebs - Update-Service 🎯
+echo ===========================================
+echo.
+:: Prüfe, ob der Ordner nebenan überhaupt existiert
+if exist "..\TargetVisionDeLuebs\" (
+    :: Gehe in den Ordner (und merke dir, wo wir gerade waren)
+    pushd "..\TargetVisionDeLuebs"
+    
+    echo Suche nach neuen Versionen auf GitHub...
+    git fetch origin
+    git --no-pager diff --stat --color HEAD origin/main
+    git reset --hard origin/main
+    
+    :: Springe zurück zu Championship
+    popd
+) else (
+    echo [INFO] Der Ordner "TargetVisionDeLuebs" wurde auf diesem PC nicht gefunden.
+    echo        Das Update wird uebersprungen!
+)
+echo.
+
+
+echo ===========================================
 echo   Championship DeLuebs - Update-Service 📊
 echo ===========================================
 echo.
