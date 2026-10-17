@@ -27,6 +27,7 @@ import tkinter as tk
 import ctypes
 import pygetwindow as gw
 import os
+import configparser  # <-- NEU
 
 if sys.platform == "win32":
     try: ctypes.windll.shcore.SetProcessDpiAwareness(1)
@@ -53,6 +54,7 @@ def apply_window_logic(window):
     window.bind("<Alt-F12>", lambda e: toggle_border(window))
     window.bind("<Alt-F11>", lambda e: print_coords(window))
     window.bind("<Alt-F8>", lambda e: save_layout_to_config(window))
+    window.bind("<Home>", lambda e: restore_all_windows())  # <-- NEU (POS1-Taste)
     
     # NEU: Die intelligente Schleife, um den Rahmen aus der INI zu laden!
     def apply_border_from_ini():
@@ -193,6 +195,69 @@ def save_layout_to_config(current_window):
         
     print(f"✅ Layout & Rahmen erfolgreich gespeichert!")
 
+def restore_all_windows():
+    print("\n🔄 POS1 gedrückt: Ordne alle Fenster neu an...")
+    targets = {
+        'Shooting DeL': 'shooting',
+        'Championship': 'championship',
+        'LIVE': 'live',
+        'Anzeige': 'anzeige',
+        'DeLuebs_Master_Console': 'console'
+    }
+    
+    # 1. Fallback-Werte laden (falls noch nie mit Alt+F8 in die INI geschrieben wurde)
+    layout = {
+        'shooting': [0, 0, 1920, 1080],
+        'championship': [1920, 0, 1520, 700],
+        'live': [1920, 672, 1520, 720],
+        'anzeige': [1120, 1080, 800, 319],
+        'console': [0, 1080, 1120, 319]
+    }
+    
+    # 2. INI auslesen und Standardwerte überschreiben, falls eigene Config vorhanden
+    if os.path.exists(ini_path):
+        config = configparser.ConfigParser()
+        config.read(ini_path, encoding='utf-8')
+        if config.has_section('Layout'):
+            for key in layout.keys():
+                if config.has_option('Layout', key):
+                    try:
+                        val = config.get('Layout', key)
+                        parts = [int(p.strip()) for p in val.split(',')]
+                        if len(parts) >= 4:
+                            layout[key] = parts[:4]
+                    except Exception:
+                        pass
+                        
+    # 3. Fenster sicher anordnen
+    for title_part, key in targets.items():
+        tx = int(layout[key][0] * scale_factor)
+        ty = int(layout[key][1] * scale_factor)
+        tw = int(layout[key][2] * scale_factor)
+        th = int(layout[key][3] * scale_factor)
+        
+        if scale_factor == 1.0:
+            tx -= 7
+            tw += 14
+            th += 7
+            
+        windows = gw.getWindowsWithTitle(title_part)
+        for win in windows:
+            # Restore ausgliedern, damit rahmenlose Fenster keinen Abbruch verursachen
+            try:
+                win.restore()
+            except Exception:
+                pass
+                
+            try:
+                win.moveTo(tx, ty)
+                win.resizeTo(tw, th)
+                print(f"  ✅ {title_part} positioniert auf {tx},{ty}")
+            except Exception as e:
+                print(f"  ❌ Fehler bei {title_part}: {e}")
+                
+    print("✅ Anordnung abgeschlossen!")
+
 class ScaledTk(OriginalTk):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -315,18 +380,24 @@ def wait_and_position(partial_title, target_x, target_y, target_width, target_he
     for versuch in range(max_retries):
         windows = gw.getWindowsWithTitle(partial_title)
         if windows:
-            try:
-                win = windows[0]
-                win.restore()
-                win.moveTo(target_x, target_y)
-                win.resizeTo(target_width, target_height)
-                print(f"✅ '{partial_title}' positioniert!")
+            fenster_erfolgreich_bewegt = False
+            # NEU: Wir iterieren über ALLE gefundenen Fenster mit diesem Namen
+            for win in windows:
+                try:
+                    win.restore()
+                    win.moveTo(target_x, target_y)
+                    win.resizeTo(target_width, target_height)
+                    fenster_erfolgreich_bewegt = True
+                except Exception as e:
+                    pass
+            
+            # Wenn mindestens ein Fenster bewegt wurde, brechen wir die Warte-Schleife ab
+            if fenster_erfolgreich_bewegt:
+                print(f"✅ Alle gefundenen '{partial_title}' positioniert!")
                 return True
-            except Exception as e:
-                pass
+                
         time.sleep(1)
     return False
-
 def setup_studio():
     if sys.platform == "win32":
         console_title = "DeLuebs_Master_Console"
@@ -384,7 +455,16 @@ def setup_studio():
     wait_and_position('Anzeige', *layout['anzeige'], scale_factor)
     wait_and_position('DeLuebs_Master_Console', *layout['console'], scale_factor)
 
-    print("\n🎉 Studio-Layout aktiviert. Alles bereit!")
+    # --- NEU: Die Konsolen-Anleitung ---
+    print("\n" + "="*55)
+    print(" 🎉 STUDIO-LAYOUT AKTIVIERT. ALLES BEREIT!")
+    print("="*55)
+    print(" ⌨️  TASTENKOMBINATIONEN (im aktiven Fenster drücken):")
+    print("  [Alt + F8]  -> 💾 Speichert Positionen & Rahmen in die config.ini")
+    print("  [POS1]      -> 🔄 Ordnet alle Fenster wieder korrekt an")
+    print("  [Alt + F12] -> 🔲 Schaltet den Fensterrahmen an/aus")
+    print("  [Alt + F11] -> 📍 Gibt die exakten Koordinaten in der Konsole aus")
+    print("="*55 + "\n")
 
 if __name__ == "__main__":
     setup_studio()
